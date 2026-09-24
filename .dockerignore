@@ -1,0 +1,13 @@
+node_modules
+dist
+.next
+coverage
+.git
+.github
+*.log
+.env
+.env.*
+uploads/*
+!uploads/.gitkeep
+README.md
+docs

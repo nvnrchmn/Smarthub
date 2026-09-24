@@ -1,0 +1,61 @@
+name: smarthub
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: smarthub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: smarthub_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - smarthub-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smarthub_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: smarthub-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/smarthub_dev?schema=public
+      JWT_SECRET: ganti-dengan-secret-minimal-32-karakter
+      JWT_EXPIRES_IN: 8h
+      PORT: 4000
+      NODE_ENV: production
+      CORS_ORIGIN: http://localhost:3000
+      PUBLIC_API_URL: http://localhost:4000
+      UPLOAD_DIR: uploads
+    ports:
+      - "4000:4000"
+    volumes:
+      - smarthub-uploads:/app/apps/api/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: smarthub-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      API_BASE_URL: http://api:4000/api/v1
+      AUTH_COOKIE_NAME: smarthub_token
+    ports:
+      - "3000:3000"
+
+volumes:
+  smarthub-pgdata:
+  smarthub-uploads:

@@ -1,0 +1,13 @@
+# Markdown
+*.md
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+build
+.next
+
+# Env
+.env

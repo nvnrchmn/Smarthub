@@ -1,0 +1,896 @@
+// Skema Struktur Data SmartHub Fase 1 (sumber: docs/PRD.md)
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum StatusMilik {
+  Milik_Sendiri
+  Sewa_Kontrak
+  Kosong
+}
+
+enum StatusHunian {
+  Dihuni
+  Tidak_Dihuni
+}
+
+enum JenisKelamin {
+  Laki_Laki
+  Perempuan
+}
+
+enum HubunganKeluarga {
+  Kepala_Keluarga
+  Istri
+  Anak
+  Orang_Tua
+  Mertua
+  Famili_Lain
+}
+
+enum StatusTinggal {
+  Tetap
+  Kontrak_Sewa
+  Sementara
+}
+
+enum StatusAktif {
+  Aktif
+  Meninggal
+  Pindah_Keluar
+}
+
+enum RolePengguna {
+  Ketua_RT
+  Sekretaris
+  Bendahara
+  Keamanan
+  Warga
+}
+
+enum StatusAkun {
+  Aktif
+  Nonaktif
+}
+
+enum JenisKas {
+  Pemasukan
+  Pengeluaran
+}
+
+enum StatusBayar {
+  Belum_Bayar
+  Menunggu_Konfirmasi
+  Lunas
+}
+
+enum JenisMutasi {
+  Lahir
+  Datang
+  Meninggal
+  Pindah_Keluar
+}
+
+enum StatusVerifikasi {
+  Menunggu_Verifikasi
+  Terverifikasi
+  Ditolak
+}
+
+enum StatusPostingan {
+  Aktif
+  Disembunyikan
+  Dihapus
+}
+
+enum StatusProduk {
+  Aktif
+  Terjual
+  Disembunyikan
+  Dihapus
+}
+
+enum KondisiProduk {
+  Baru
+  Bekas
+}
+
+enum AlasanLaporan {
+  Penipuan
+  Barang_Terlarang
+  Spam
+  Lainnya
+}
+
+enum StatusLaporan {
+  Baru
+  Ditangani
+  Ditolak
+}
+
+enum TipeNotifikasi {
+  Mention
+  Balasan
+}
+
+model Rumah {
+  id_rumah           Int              @id @default(autoincrement())
+  nomor_rumah        String
+  blok               String
+  jalan_gang         String
+  status_kepemilikan StatusMilik
+  status_hunian      StatusHunian
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  kartu_keluarga     KartuKeluarga[]
+  tamu_kunjungan     TamuKunjungan[]
+  iuran_rumah        IuranRumah[]
+  id_tenant          Int
+  tenant             Tenant          @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@unique([id_tenant, nomor_rumah, blok, jalan_gang])
+  @@index([id_tenant])
+}
+
+model KartuKeluarga {
+  no_kk           String   @id @db.VarChar(16)
+  id_rumah        Int
+  tgl_dikeluarkan DateTime @db.Date
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  rumah           Rumah    @relation(fields: [id_rumah], references: [id_rumah])
+  warga           Warga[]
+  id_tenant       Int
+  tenant          Tenant  @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([id_rumah])
+  @@index([id_tenant])
+}
+
+model Warga {
+  nik                      String           @id @db.VarChar(16)
+  no_kk                    String           @db.VarChar(16)
+  nama_lengkap             String
+  tempat_lahir             String
+  tanggal_lahir            DateTime         @db.Date
+  jenis_kelamin            JenisKelamin
+  agama                    String
+  status_perkawinan        String
+  pekerjaan                String
+  no_hp                    String?
+  status_hubungan_keluarga HubunganKeluarga
+  status_tinggal           StatusTinggal
+  status_aktif             StatusAktif      @default(Aktif)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  kartu_keluarga           KartuKeluarga    @relation(fields: [no_kk], references: [no_kk])
+  akun_pengguna            AkunPengguna?
+  mutasi_warga             MutasiWarga[]
+  id_tenant                Int
+  tenant                   Tenant          @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([no_kk])
+  @@index([status_aktif])
+  @@index([id_tenant])
+}
+
+model AkunPengguna {
+  id_pengguna         Int           @id @default(autoincrement())
+  nik                 String?       @unique @db.VarChar(16)
+  email               String        @unique
+  username            String?       @unique
+  password_hash       String
+  role                RolePengguna  @default(Warga)
+  status_akun         StatusAkun    @default(Aktif)
+  mfa_secret          String?
+  mfa_aktif           Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  warga               Warga?        @relation(fields: [nik], references: [nik])
+  kas_umum            KasUmum[]     @relation("KasPengurus")
+  kas_diverifikasi    KasUmum[]     @relation("KasVerifikator")
+  mutasi_diverifikasi MutasiWarga[] @relation("MutasiVerifikator")
+  iuran_diverifikasi  IuranRumah[]  @relation("IuranVerifikator")
+  postingan           Postingan[]       @relation("PostinganPenulis")
+  reaksi_postingan    ReaksiPostingan[] @relation("ReaksiPengguna")
+  suara_poll          PollSuara[]       @relation("PollSuaraPengguna")
+  produk              Produk[]          @relation("ProdukPenjual")
+  favorit_produk      FavoritProduk[]   @relation("FavoritPengguna")
+  laporan_dibuat      LaporanProduk[]   @relation("LaporanPelapor")
+  laporan_ditangani   LaporanProduk[]   @relation("LaporanPenangani")
+  mention_disebut     PostinganMention[] @relation("MentionPengguna")
+  notifikasi          Notifikasi[]       @relation("NotifikasiPenerima")
+  id_tenant           Int
+  tenant              Tenant            @relation(fields: [id_tenant], references: [id_tenant])
+  sesi_refresh        SesiRefreshToken[]
+  preferensi_notifikasi PreferensiNotifikasi?
+
+  @@index([id_tenant])
+}
+
+model SesiRefreshToken {
+  id_sesi          Int           @id @default(autoincrement())
+  id_pengguna      Int
+  token_hash       String        @unique
+  kedaluwarsa      DateTime
+  dicabut_pada     DateTime?
+  terakhir_dipakai DateTime?
+  user_agent       String?
+  ip               String?
+  createdAt        DateTime      @default(now())
+  akun             AkunPengguna  @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: Cascade)
+
+  @@index([id_pengguna, dicabut_pada])
+  @@index([kedaluwarsa])
+}
+
+model MutasiWarga {
+  id_mutasi         Int              @id @default(autoincrement())
+  nik               String           @db.VarChar(16)
+  jenis_mutasi      JenisMutasi
+  tanggal_peristiwa DateTime         @db.Date
+  tanggal_lapor     DateTime         @default(now())
+  keterangan        String           @db.Text
+  berkas_pendukung  String?
+  status_verifikasi StatusVerifikasi @default(Menunggu_Verifikasi)
+  diverifikasi_oleh Int?
+  diverifikasi_pada DateTime?
+  warga             Warga            @relation(fields: [nik], references: [nik])
+  verifikator       AkunPengguna?    @relation("MutasiVerifikator", fields: [diverifikasi_oleh], references: [id_pengguna])
+  id_tenant         Int
+  tenant            Tenant          @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([nik])
+  @@index([status_verifikasi])
+  @@index([id_tenant])
+}
+
+model TamuKunjungan {
+  id_tamu         Int       @id @default(autoincrement())
+  id_rumah_tujuan Int
+  nama_tamu       String
+  jumlah_tamu     Int
+  tgl_datang      DateTime  @default(now())
+  tgl_pergi       DateTime?
+  keperluan       String    @db.Text
+  rumah           Rumah     @relation(fields: [id_rumah_tujuan], references: [id_rumah])
+  id_tenant       Int
+  tenant          Tenant   @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([tgl_pergi])
+  @@index([id_rumah_tujuan])
+  @@index([id_tenant])
+}
+
+model KategoriKeuangan {
+  id_kategori   Int          @id @default(autoincrement())
+  nama_kategori String
+  jenis         JenisKas
+  iuran_rumah   IuranRumah[]
+  kas_umum      KasUmum[]
+  id_tenant     Int
+  tenant        Tenant      @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@unique([id_tenant, nama_kategori, jenis])
+  @@index([id_tenant])
+}
+
+model IuranRumah {
+  id_iuran          Int              @id @default(autoincrement())
+  id_rumah          Int
+  id_kategori       Int
+  bulan             Int
+  tahun             Int
+  jumlah_tagihan    Decimal          @db.Decimal(12, 2)
+  status_bayar      StatusBayar      @default(Belum_Bayar)
+  tgl_bayar         DateTime?
+  bukti_transfer    String?
+  diverifikasi_oleh Int?
+  diverifikasi_pada DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  rumah             Rumah            @relation(fields: [id_rumah], references: [id_rumah])
+  kategori          KategoriKeuangan @relation(fields: [id_kategori], references: [id_kategori])
+  verifikator       AkunPengguna?    @relation("IuranVerifikator", fields: [diverifikasi_oleh], references: [id_pengguna])
+  id_tenant         Int
+  tenant            Tenant?          @relation(fields: [id_tenant], references: [id_tenant])
+  pembayaran_qris   PembayaranIuran?
+
+  @@unique([id_rumah, id_kategori, bulan, tahun])
+  @@index([status_bayar, bulan, tahun])
+  @@index([id_tenant])
+}
+
+model KasUmum {
+  id_transaksi      Int              @id @default(autoincrement())
+  id_kategori       Int
+  id_pengurus       Int
+  tanggal           DateTime         @db.Date
+  jumlah            Decimal          @db.Decimal(12, 2)
+  keterangan        String           @db.Text
+  status_verifikasi StatusVerifikasi @default(Menunggu_Verifikasi)
+  diverifikasi_oleh Int?
+  diverifikasi_pada DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  kategori          KategoriKeuangan @relation(fields: [id_kategori], references: [id_kategori])
+  pengurus          AkunPengguna     @relation("KasPengurus", fields: [id_pengurus], references: [id_pengguna])
+  verifikator       AkunPengguna?    @relation("KasVerifikator", fields: [diverifikasi_oleh], references: [id_pengguna])
+  id_tenant         Int
+  tenant            Tenant          @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([tanggal])
+  @@index([status_verifikasi])
+  @@index([id_tenant])
+}
+
+model Postingan {
+  id_postingan   Int             @id @default(autoincrement())
+  id_penulis     Int
+  id_induk       Int?
+  isi            String          @db.Text
+  status         StatusPostingan @default(Aktif)
+  jumlah_suka    Int             @default(0)
+  jumlah_balasan Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  penulis        AkunPengguna    @relation("PostinganPenulis", fields: [id_penulis], references: [id_pengguna])
+  induk          Postingan?      @relation("BalasanPostingan", fields: [id_induk], references: [id_postingan])
+  balasan        Postingan[]     @relation("BalasanPostingan")
+  lampiran       PostinganLampiran[]
+  poll           Poll?
+  reaksi         ReaksiPostingan[]
+  mention        PostinganMention[]
+  id_tenant      Int
+  tenant         Tenant             @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([id_induk, createdAt])
+  @@index([status, createdAt])
+  @@index([id_penulis])
+  @@index([id_tenant])
+}
+
+model PostinganMention {
+  id_mention   Int          @id @default(autoincrement())
+  id_postingan Int
+  id_pengguna  Int
+  createdAt    DateTime     @default(now())
+  postingan    Postingan    @relation(fields: [id_postingan], references: [id_postingan], onDelete: Cascade)
+  pengguna     AkunPengguna @relation("MentionPengguna", fields: [id_pengguna], references: [id_pengguna])
+
+  @@unique([id_postingan, id_pengguna])
+  @@index([id_pengguna])
+}
+
+model Notifikasi {
+  id_notifikasi Int            @id @default(autoincrement())
+  id_penerima   Int
+  tipe          TipeNotifikasi
+  id_referensi  Int?
+  pesan         String
+  dibaca_pada   DateTime?
+  createdAt        DateTime      @default(now())
+  penerima         AkunPengguna   @relation("NotifikasiPenerima", fields: [id_penerima], references: [id_pengguna])
+  id_tenant        Int
+  tenant           Tenant        @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([id_penerima, dibaca_pada])
+  @@index([id_penerima, createdAt])
+  @@index([id_tenant])
+}
+
+model PostinganLampiran {
+  id_lampiran  Int       @id @default(autoincrement())
+  id_postingan Int
+  url          String
+  tipe         String    @default("image")
+  postingan    Postingan @relation(fields: [id_postingan], references: [id_postingan], onDelete: Cascade)
+
+  @@index([id_postingan])
+}
+
+model ReaksiPostingan {
+  id_reaksi    Int          @id @default(autoincrement())
+  id_postingan Int
+  id_pengguna  Int
+  createdAt    DateTime     @default(now())
+  postingan    Postingan    @relation(fields: [id_postingan], references: [id_postingan], onDelete: Cascade)
+  pengguna     AkunPengguna @relation("ReaksiPengguna", fields: [id_pengguna], references: [id_pengguna])
+
+  @@unique([id_postingan, id_pengguna])
+  @@index([id_pengguna])
+}
+
+model Poll {
+  id_poll       Int         @id @default(autoincrement())
+  id_postingan  Int         @unique
+  berakhir_pada DateTime?
+  createdAt     DateTime    @default(now())
+  postingan     Postingan   @relation(fields: [id_postingan], references: [id_postingan], onDelete: Cascade)
+  opsi          PollOpsi[]
+  suara         PollSuara[]
+}
+
+model PollOpsi {
+  id_opsi      Int         @id @default(autoincrement())
+  id_poll      Int
+  label        String
+  urutan       Int
+  jumlah_suara Int         @default(0)
+  poll         Poll        @relation(fields: [id_poll], references: [id_poll], onDelete: Cascade)
+  suara        PollSuara[]
+
+  @@unique([id_poll, urutan])
+}
+
+model PollSuara {
+  id_suara    Int          @id @default(autoincrement())
+  id_poll     Int
+  id_opsi     Int
+  id_pengguna Int
+  createdAt   DateTime     @default(now())
+  poll        Poll         @relation(fields: [id_poll], references: [id_poll], onDelete: Cascade)
+  opsi        PollOpsi     @relation(fields: [id_opsi], references: [id_opsi])
+  pengguna    AkunPengguna @relation("PollSuaraPengguna", fields: [id_pengguna], references: [id_pengguna])
+
+  @@unique([id_poll, id_pengguna])
+  @@index([id_opsi])
+}
+
+model KategoriProduk {
+  id_kategori_produk Int      @id @default(autoincrement())
+  nama               String
+  slug               String   @unique
+  aktif              Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  produk             Produk[]
+  id_tenant          Int
+  tenant             Tenant  @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([id_tenant])
+}
+
+model Produk {
+  id_produk          Int            @id @default(autoincrement())
+  id_penjual         Int
+  id_kategori_produk Int?
+  judul              String
+  deskripsi          String         @db.Text
+  harga              Decimal        @db.Decimal(12, 2)
+  kondisi            KondisiProduk
+  satuan             String         @default("pcs")
+  bisa_nego          Boolean        @default(false)
+  tampilkan_kontak   Boolean        @default(true)
+  status             StatusProduk   @default(Aktif)
+  jumlah_dilihat     Int            @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  penjual            AkunPengguna    @relation("ProdukPenjual", fields: [id_penjual], references: [id_pengguna])
+  kategori           KategoriProduk? @relation(fields: [id_kategori_produk], references: [id_kategori_produk])
+  foto               ProdukFoto[]
+  favorit            FavoritProduk[]
+  laporan            LaporanProduk[]
+  id_tenant          Int
+  tenant             Tenant         @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([status, createdAt])
+  @@index([id_penjual])
+  @@index([id_kategori_produk])
+  @@index([id_tenant])
+}
+
+model ProdukFoto {
+  id_foto   Int      @id @default(autoincrement())
+  id_produk Int
+  url       String
+  urutan    Int      @default(1)
+  produk    Produk   @relation(fields: [id_produk], references: [id_produk], onDelete: Cascade)
+
+  @@index([id_produk])
+}
+
+model FavoritProduk {
+  id_favorit  Int          @id @default(autoincrement())
+  id_produk   Int
+  id_pengguna Int
+  createdAt   DateTime     @default(now())
+  produk      Produk       @relation(fields: [id_produk], references: [id_produk], onDelete: Cascade)
+  pengguna    AkunPengguna @relation("FavoritPengguna", fields: [id_pengguna], references: [id_pengguna])
+
+  @@unique([id_produk, id_pengguna])
+  @@index([id_pengguna])
+}
+
+model LaporanProduk {
+  id_laporan     Int            @id @default(autoincrement())
+  id_produk      Int
+  id_pelapor     Int
+  alasan         AlasanLaporan
+  keterangan     String?        @db.Text
+  status         StatusLaporan  @default(Baru)
+  ditangani_oleh Int?
+  ditangani_pada DateTime?
+  createdAt      DateTime       @default(now())
+  produk         Produk         @relation(fields: [id_produk], references: [id_produk], onDelete: Cascade)
+  pelapor        AkunPengguna   @relation("LaporanPelapor", fields: [id_pelapor], references: [id_pengguna])
+  penangani      AkunPengguna?  @relation("LaporanPenangani", fields: [ditangani_oleh], references: [id_pengguna])
+  id_tenant      Int
+  tenant         Tenant        @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([status, createdAt])
+  @@index([id_produk])
+  @@index([id_tenant])
+}
+
+// ---------------------------------------------------------------------------
+// Fase SaaS — Multi-tenancy (expand). id_tenant masih nullable pada tahap ini;
+// kolom dijadikan NOT NULL setelah backfill dan verifikasi (contract).
+// ---------------------------------------------------------------------------
+
+enum StatusTenant {
+  Menunggu_Verifikasi
+  Terverifikasi
+  Aktif
+  Ditangguhkan
+  Dibatalkan
+}
+
+model Tenant {
+  id_tenant    Int          @id @default(autoincrement())
+  nama         String
+  slug         String       @unique
+  provinsi     String
+  kabupaten    String
+  kecamatan    String
+  jumlah_rumah Int?
+  kontak_email String
+  kontak_hp    String?
+  status       StatusTenant @default(Menunggu_Verifikasi)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  rumah            Rumah[]
+  kartu_keluarga   KartuKeluarga[]
+  warga            Warga[]
+  mutasi_warga     MutasiWarga[]
+  tamu_kunjungan   TamuKunjungan[]
+  kategori_keuangan KategoriKeuangan[]
+  iuran_rumah      IuranRumah[]
+  kas_umum         KasUmum[]
+  akun_pengguna    AkunPengguna[]
+  postingan        Postingan[]
+  kategori_produk  KategoriProduk[]
+  produk           Produk[]
+  laporan_produk   LaporanProduk[]
+  notifikasi       Notifikasi[]
+  langganan        LanggananTenant?
+  invoice_langganan InvoiceLangganan[]
+  akun_pembayaran  AkunPembayaranTenant?
+  rekening_bank    RekeningBankTenant[]
+  kyc_submission   KycSubmission[]
+  pembayaran_iuran PembayaranIuran[]
+  pencairan        PencairanTenant[]
+  audit_log        AuditLog[]
+
+  @@index([status])
+}
+
+enum StatusLangganan {
+  Trial
+  Aktif
+  Menunggak
+  Berhenti
+}
+
+enum MetodeBayarLangganan {
+  Transfer_Manual
+  QRIS
+  Virtual_Account
+}
+
+model PaketLangganan {
+  kode          String   @id
+  nama          String
+  harga_bulanan Decimal  @db.Decimal(12, 2)
+  harga_tahunan Decimal  @db.Decimal(12, 2)
+  batas_rumah   Int?
+  fitur         Json
+  aktif         Boolean  @default(true)
+  langganan     LanggananTenant[]
+  invoice_langganan InvoiceLangganan[]
+}
+
+model LanggananTenant {
+  id_langganan   Int             @id @default(autoincrement())
+  id_tenant      Int             @unique
+  kode_paket     String
+  status         StatusLangganan @default(Trial)
+  mulai          DateTime        @db.Date
+  berakhir       DateTime        @db.Date
+  trial_berakhir DateTime?       @db.Date
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  tenant         Tenant          @relation(fields: [id_tenant], references: [id_tenant])
+  paket          PaketLangganan  @relation(fields: [kode_paket], references: [kode])
+  invoice        InvoiceLangganan[]
+
+  @@index([status, berakhir])
+}
+
+model InvoiceLangganan {
+  id_invoice        Int             @id @default(autoincrement())
+  id_tenant         Int
+  id_langganan      Int
+  kode_paket        String?
+  periode_mulai     DateTime        @db.Date
+  periode_akhir     DateTime        @db.Date
+  jumlah            Decimal         @db.Decimal(12, 2)
+  status            StatusBayar     @default(Belum_Bayar)
+  jatuh_tempo       DateTime        @db.Date
+  bukti_transfer    String?
+  paid_at           DateTime?
+  diverifikasi_oleh Int?
+  diverifikasi_pada DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  tenant            Tenant          @relation(fields: [id_tenant], references: [id_tenant])
+  langganan         LanggananTenant @relation(fields: [id_langganan], references: [id_langganan])
+  paket             PaketLangganan? @relation(fields: [kode_paket], references: [kode])
+  pembayaran        PembayaranLangganan[]
+
+  @@index([id_tenant, status])
+}
+
+model PembayaranLangganan {
+  id_pembayaran   Int                  @id @default(autoincrement())
+  id_invoice      Int
+  metode          MetodeBayarLangganan @default(Transfer_Manual)
+  referensi_bayar String?
+  jumlah          Decimal              @db.Decimal(12, 2)
+  status          StatusBayar          @default(Belum_Bayar)
+  paid_at         DateTime?
+  createdAt       DateTime             @default(now())
+  invoice         InvoiceLangganan     @relation(fields: [id_invoice], references: [id_invoice], onDelete: Cascade)
+
+  @@index([id_invoice])
+}
+
+// ---------------------------------------------------------------------------
+// Fase SaaS — Billing via Logikraf Payment Hub (TARGET; opsional per tenant)
+// ---------------------------------------------------------------------------
+
+// Akun pembayaran RT (sub-akun MANAGED). KYC dikelola di SmartHub (mode
+// verify-on-behalf); eksekusi ke penyedia dilakukan Logikraf Payment Hub.
+// Dokumen KYC TIDAK disimpan di sini (hanya referensi berkas).
+model AkunPembayaranTenant {
+  id_akun_pembayaran    Int           @id @default(autoincrement())
+  id_tenant             Int           @unique
+  penyedia_account_id   String        @unique
+  tipe                  String        @default("MANAGED")
+  entity_type           String        @default("INDIVIDUAL")
+  status_kyc            String        @default("BELUM")
+  money_out_enabled     Boolean       @default(false)
+  payment_channels      Json?
+  kyc_submitted_at      DateTime?
+  kyc_verified_at       DateTime?
+  failure_reasons       Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  tenant                Tenant        @relation(fields: [id_tenant], references: [id_tenant])
+}
+
+model RekeningBankTenant {
+  id_rekening      Int      @id @default(autoincrement())
+  id_tenant        Int
+  bank_code        String
+  bank_name        String
+  account_number   String
+  account_holder   String
+  is_default       Boolean  @default(false)
+  status_verifikasi String  @default("Belum_Diverifikasi")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tenant           Tenant   @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@unique([id_tenant, bank_code, account_number])
+  @@index([id_tenant])
+}
+
+model KycSubmission {
+  id_kyc                    Int      @id @default(autoincrement())
+  id_tenant                 Int
+  entity_type               String   @default("INDIVIDUAL")
+  legal_name                String
+  email                     String
+  ktp_number_hash           String?
+  ktp_number_masked         String?
+  tanggal_lahir             DateTime? @db.Date
+  jenis_kelamin             String?
+  kewarganegaraan           String?
+  alamat                    Json?
+  data_usaha                Json?
+  file_ids                  Json?
+  status                    String   @default("DRAFT")
+  failure_reasons           Json?
+  consent_at                DateTime?
+  consent_ip                String?
+  consent_user_agent        String?
+  consent_version           String?
+  nama_penandatangan        String?
+  service_agreement_file_id String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  tenant                    Tenant   @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([id_tenant, status])
+}
+
+model PembayaranIuran {
+  id_pembayaran_iuran Int          @id @default(autoincrement())
+  id_tenant           Int
+  id_iuran            Int          @unique
+  referensi_bayar     String       @unique
+  qr_string           String       @db.Text
+  jumlah              Decimal      @db.Decimal(12, 2)
+  kedaluwarsa_pada    DateTime
+  status              String       @default("PENDING")
+  paid_at             DateTime?
+  mdr                 Decimal?     @db.Decimal(12, 2)
+  biaya_hub           Decimal?     @db.Decimal(12, 2)
+  fee_platform        Decimal?     @db.Decimal(12, 2)
+  net_ke_rt           Decimal?     @db.Decimal(12, 2)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  tenant              Tenant       @relation(fields: [id_tenant], references: [id_tenant])
+  iuran               IuranRumah   @relation(fields: [id_iuran], references: [id_iuran])
+
+  @@index([id_tenant, status])
+}
+
+model LedgerTransaksi {
+  id_ledger    Int           @id @default(autoincrement())
+  id_tenant    Int?
+  tipe         String
+  id_referensi Int
+  keterangan   String
+  createdAt    DateTime      @default(now())
+  entries      LedgerEntry[]
+
+  @@index([id_tenant, createdAt])
+}
+
+model LedgerEntry {
+  id_entry  Int             @id @default(autoincrement())
+  id_ledger Int
+  akun      String
+  debit     Decimal         @db.Decimal(12, 2) @default(0)
+  kredit    Decimal         @db.Decimal(12, 2) @default(0)
+  ledger    LedgerTransaksi @relation(fields: [id_ledger], references: [id_ledger], onDelete: Cascade)
+
+  @@index([id_ledger])
+}
+
+model PencairanTenant {
+  id_pencairan     Int      @id @default(autoincrement())
+  id_tenant        Int
+  id_rekening      Int?
+  jumlah           Decimal  @db.Decimal(12, 2)
+  biaya_transfer   Decimal  @db.Decimal(12, 2) @default(0)
+  status           String   @default("MENUNGGU")
+  metode           String   @default("Payout")
+  idempotency_key  String?  @unique
+  referensi_payout String?
+  failure_code     String?
+  failure_reason   String?
+  bukti_transfer   String?
+  dijadwalkan_pada DateTime @db.Date
+  selesai_pada     DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tenant           Tenant   @relation(fields: [id_tenant], references: [id_tenant])
+
+  @@index([id_tenant, status])
+}
+
+model WebhookEvent {
+  id_event     Int       @id @default(autoincrement())
+  penyedia     String    @default("logikraf")
+  event_id     String    @unique
+  tipe         String
+  payload      Json
+  processed_at DateTime?
+  error        String?
+  createdAt    DateTime  @default(now())
+
+  @@index([penyedia, processed_at])
+}
+
+// ---------------------------------------------------------------------------
+// Konsol platform — Superadmin mengelola SmartHub lintas tenant
+// ---------------------------------------------------------------------------
+
+model AkunPlatform {
+  id_akun_platform Int         @id @default(autoincrement())
+  nama             String
+  email            String      @unique
+  password_hash    String
+  role             String      @default("Superadmin")
+  status_akun      StatusAkun  @default(Aktif)
+  mfa_secret       String?
+  mfa_aktif        Boolean     @default(false)
+  terakhir_masuk   DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  audit            AuditLog[]
+
+  @@index([role, status_akun])
+}
+
+enum KanalNotifikasi {
+  InApp
+  WhatsApp
+  Email
+}
+
+enum StatusOutbox {
+  Menunggu
+  Terkirim
+  Gagal
+}
+
+model NotificationOutbox {
+  id_outbox       Int             @id @default(autoincrement())
+  id_tenant       Int
+  id_penerima     Int?
+  kanal           KanalNotifikasi
+  tujuan          String
+  tipe            String
+  judul           String?
+  pesan           String          @db.Text
+  status          StatusOutbox    @default(Menunggu)
+  percobaan       Int             @default(0)
+  error           String?
+  terjadwal_pada  DateTime        @default(now())
+  terkirim_pada   DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status, terjadwal_pada])
+  @@index([id_tenant, createdAt])
+}
+
+model PreferensiNotifikasi {
+  id_preferensi   Int      @id @default(autoincrement())
+  id_pengguna     Int      @unique
+  whatsapp        Boolean  @default(true)
+  email           Boolean  @default(true)
+  pengingat_iuran Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+  akun            AkunPengguna @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: Cascade)
+}
+
+model AuditLog {
+  id_audit         Int           @id @default(autoincrement())
+  id_akun_platform Int?
+  id_tenant        Int?
+  id_pengguna      Int?
+  aktor_email      String?
+  aksi             String
+  entitas          String
+  id_entitas       String?
+  detail           Json?
+  createdAt        DateTime      @default(now())
+  akun             AkunPlatform? @relation(fields: [id_akun_platform], references: [id_akun_platform], onDelete: SetNull)
+  tenant           Tenant?       @relation(fields: [id_tenant], references: [id_tenant], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entitas, id_entitas])
+  @@index([id_tenant, createdAt])
+}

@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: smarthub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d smarthub_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/smarthub_test?schema=public
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/smarthub_test?schema=public
+      JWT_SECRET: ci-secret-key-minimal-32-characters-long
+      JWT_EXPIRES_IN: 8h
+      NODE_ENV: test
+      CORS_ORIGIN: http://localhost:3000
+      PUBLIC_API_URL: http://localhost:4000
+      UPLOAD_DIR: uploads
+      API_BASE_URL: http://localhost:4000/api/v1
+      AUTH_COOKIE_NAME: smarthub_token
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm --filter @smarthub/api prisma:generate
+
+      - name: Prisma validate
+        run: pnpm --filter @smarthub/api prisma:validate
+
+      - name: Prisma migrate deploy
+        run: pnpm --filter @smarthub/api prisma:deploy
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Build
+        run: pnpm -r build
