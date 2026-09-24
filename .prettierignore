@@ -11,3 +11,7 @@ build
 
 # Env
 .env
+
+# Lockfile (dikelola pnpm, jangan diformat)
+pnpm-lock.yaml
+*.lock

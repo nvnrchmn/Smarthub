@@ -1,0 +1,22 @@
+# Normalisasi line ending: simpan LF di repo, apa pun OS kontributor.
+* text=auto eol=lf
+
+# Berkas biner jangan dinormalisasi.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.avif binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# Lockfile & artefak yang tidak perlu dihitung diffs-nya.
+pnpm-lock.yaml text eol=lf
+pnpm-lock.yaml linguist-generated=true
+*.min.js linguist-generated=true
+*.min.css linguist-generated=true

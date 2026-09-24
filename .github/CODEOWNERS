@@ -1,0 +1,10 @@
+# Pemilik kode default: pemelihara repo.
+* @nvnrchmn
+
+# Area sensitif wajib mendapat review pemelihara.
+/apps/api/prisma/            @nvnrchmn
+/apps/api/src/config/        @nvnrchmn
+/apps/api/src/modules/billing/ @nvnrchmn
+/apps/api/src/modules/kyc/   @nvnrchmn
+/docs/                       @nvnrchmn
+/.github/                    @nvnrchmn
