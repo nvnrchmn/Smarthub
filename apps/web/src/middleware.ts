@@ -7,8 +7,10 @@ import {
   isTokenExpired,
 } from "@/lib/auth";
 import { PLATFORM_COOKIE_NAME, isPlatformTokenExpired } from "@/lib/platform-auth";
+import { PUBLIC_PATH_SET } from "@/lib/public-paths";
 
-const PUBLIC_PATHS = new Set(["/login", "/reset-password"]);
+// Daftar path publik ada di "@/lib/public-paths" agar tidak drift dengan robots.ts.
+// "/" = landing; pengguna yang sudah masuk diarahkan di page.tsx.
 
 export const middleware = (request: NextRequest): NextResponse => {
   const { pathname } = request.nextUrl;
@@ -33,7 +35,7 @@ export const middleware = (request: NextRequest): NextResponse => {
     return NextResponse.next();
   }
 
-  if (PUBLIC_PATHS.has(pathname)) {
+  if (PUBLIC_PATH_SET.has(pathname)) {
     if (pathname === "/login" && isAuthenticated && token) {
       const claims = decodeToken(token);
       return NextResponse.redirect(
@@ -53,5 +55,7 @@ export const middleware = (request: NextRequest): NextResponse => {
 };
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)"],
+  matcher: [
+    "/((?!api|_next/static|_next/image|robots.txt|sitemap.xml|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)",
+  ],
 };

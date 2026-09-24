@@ -1,6 +1,11 @@
 # SmartHub — Sistem Manajemen Warga Digital
 
-Monorepo full-stack TypeScript untuk manajemen RT/Perumahan: kependudukan (Rumah, Kartu Keluarga, Warga, Mutasi), log keamanan tamu, dan transparansi keuangan kas RT dengan RBAC 5 role.
+[![CI](https://github.com/nvnrchmn/Smarthub/actions/workflows/ci.yml/badge.svg)](https://github.com/nvnrchmn/Smarthub/actions/workflows/ci.yml)
+![Node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)
+![pnpm](https://img.shields.io/badge/pnpm-9-F69220?logo=pnpm&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+
+Monorepo full-stack TypeScript untuk manajemen RT/Perumahan: kependudukan (Rumah, Kartu Keluarga, Warga, Mutasi), log keamanan tamu, dan transparansi keuangan kas RT dengan RBAC 5 role. Pengunjung yang belum masuk akan melihat **halaman publik** (`/`) berisi ringkasan produk dan CTA masuk; pengguna yang sudah masuk diarahkan otomatis ke beranda sesuai perannya.
 
 | Bagian | Teknologi |
 |---|---|
@@ -100,6 +105,19 @@ Service: `postgres` (5432), `api` (4000), `web` (3000).
 - **Login gagal padahal akun ada** — pastikan sudah `pnpm db:seed`; kalau akun dinonaktifkan API mengembalikan 403 dengan pesan akun nonaktif.
 - **`Tidak dapat menghubungi server API SmartHub`** — API belum jalan, atau `API_BASE_URL` pada `apps/web` salah.
 - **Prisma bermasalah dengan PostgreSQL 18** — pakai Prisma 6.x terbaru; bila driver bermasalah, jalankan `postgres:16` via Docker tanpa mengubah kode.
+
+## Kontribusi & alur Git
+
+Repo ini memakai **trunk-based development** (branch pendek + Pull Request ke `main`) dan **Conventional Commits**, ditegakkan otomatis oleh commitlint & lint-staged lewat Husky.
+
+```bash
+git switch -c feat/<ringkas>     # branch pendek
+# ...komit dengan Conventional Commits, mis. "feat(web): ..."
+git push -u origin feat/<ringkas>
+# buka Pull Request; tunggu CI hijau; squash & merge
+```
+
+Selengkapnya (strategi branching, konvensi commit, proses review, versioning, larangan secret/PII) ada di **[CONTRIBUTING.md](./CONTRIBUTING.md)**.
 
 ## Catatan lanjutan (di luar Fase 1)
 
