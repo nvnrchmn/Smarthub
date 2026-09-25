@@ -51,7 +51,19 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "set -e; cd ~/Projects/Smarthub; git fetch origin; git checkout ${{ inputs.ref }}; git reset --hard origin/${{ inputs.ref }}; sudo rm -f /tmp/build-lokal.lock /tmp/bl-*.log; sudo build-lokal.sh smarthub build; sudo build-lokal.sh smarthub rilis; echo DEPLOY_OK"
+            "REF='${{ inputs.ref }}' bash -ls" <<'REMOTE'
+          set -e
+          cd ~/Projects/Smarthub
+          git fetch origin
+          git checkout "$REF"
+          git reset --hard "origin/$REF"
+          # Bersihkan artefak sementara yang bisa menghambat (milik root).
+          sudo rm -f /tmp/build-lokal.lock /tmp/bl-*.log
+          # Login shell agar pnpm/corepack ada di PATH; teruskan PATH ke sudo.
+          sudo env "PATH=$PATH" build-lokal.sh smarthub build
+          sudo env "PATH=$PATH" build-lokal.sh smarthub rilis
+          echo DEPLOY_OK
+          REMOTE
 
       - name: Smoke test
         run: |
