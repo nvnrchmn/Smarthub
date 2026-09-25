@@ -1,0 +1,45 @@
+name: Deploy
+
+# Deploy manual ke VPS smarthub.logikraf.id.
+# Menjalankan skrip build lokal di VPS (build-lokal.sh) — sama seperti alur
+# operasional yang sudah terbukti, sehingga Prisma client tetap hidup di
+# pnpm store VPS (menghindari error "Named export 'Prisma' not found").
+#
+# Prasyarat secret repo: VPS_HOST, VPS_USER, VPS_SSH_KEY.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref git di repo VPS yang akan di-deploy"
+        required: true
+        default: main
+
+concurrency:
+  group: deploy-smarthub
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Pull, build, dan rilis di VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "set -e; cd ~/Projects/Smarthub; git fetch origin; git checkout ${{ inputs.ref }}; git reset --hard origin/${{ inputs.ref }}; sudo build-lokal.sh smarthub build; sudo build-lokal.sh smarthub rilis; echo DEPLOY_OK"
+
+      - name: Smoke test
+        run: |
+          set -e
+          curl -fsS -o /dev/null https://smarthub.logikraf.id/
+          curl -fsS -o /dev/null https://smarthub.logikraf.id/login
+          curl -fsS -o /dev/null https://smarthub.logikraf.id/robots.txt
+          curl -fsS -o /dev/null https://smarthub.logikraf.id/sitemap.xml
+          echo "Smoke test OK"
