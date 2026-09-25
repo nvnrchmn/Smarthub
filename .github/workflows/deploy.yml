@@ -26,6 +26,21 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+
+          # Normalisasi: secret kadang tersimpan 1 baris (newline ter-escape)
+          # atau ter-encode base64. Coba pulihkan agar tetap bisa dipakai.
+          if ! grep -q "PRIVATE KEY" ~/.ssh/deploy_key; then
+            sed 's/\\n/\n/g' ~/.ssh/deploy_key > ~/.ssh/deploy_key.esc 2>/dev/null || true
+            if grep -q "PRIVATE KEY" ~/.ssh/deploy_key.esc 2>/dev/null; then
+              mv ~/.ssh/deploy_key.esc ~/.ssh/deploy_key
+            fi
+          fi
+          if ! grep -q "PRIVATE KEY" ~/.ssh/deploy_key; then
+            if base64 -d ~/.ssh/deploy_key > ~/.ssh/deploy_key.dec 2>/dev/null && grep -q "PRIVATE KEY" ~/.ssh/deploy_key.dec 2>/dev/null; then
+              mv ~/.ssh/deploy_key.dec ~/.ssh/deploy_key
+            fi
+          fi
+
           chmod 600 ~/.ssh/deploy_key
           echo "deploy_key lines: $(wc -l < ~/.ssh/deploy_key)"
           echo "deploy_key header: $(head -n1 ~/.ssh/deploy_key)"
