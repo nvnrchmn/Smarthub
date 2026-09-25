@@ -51,7 +51,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "set -e; cd ~/Projects/Smarthub; git fetch origin; git checkout ${{ inputs.ref }}; git reset --hard origin/${{ inputs.ref }}; sudo build-lokal.sh smarthub build; sudo build-lokal.sh smarthub rilis; echo DEPLOY_OK"
+            "set -e; cd ~/Projects/Smarthub; git fetch origin; git checkout ${{ inputs.ref }}; git reset --hard origin/${{ inputs.ref }}; echo '--- diag ---'; whoami; id; ls -la /tmp/build-lokal.lock || true; sudo rm -f /tmp/build-lokal.lock; sudo build-lokal.sh smarthub build; sudo build-lokal.sh smarthub rilis; echo DEPLOY_OK"
 
       - name: Smoke test
         run: |
