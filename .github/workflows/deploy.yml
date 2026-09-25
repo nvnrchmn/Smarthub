@@ -25,8 +25,11 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          echo "deploy_key lines: $(wc -l < ~/.ssh/deploy_key)"
+          echo "deploy_key header: $(head -n1 ~/.ssh/deploy_key)"
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1 && echo "private key: OK" || echo "private key: INVALID"
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Pull, build, dan rilis di VPS
