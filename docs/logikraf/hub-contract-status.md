@@ -56,6 +56,16 @@
 | `hubCreatePayout` | `POST /api/client-store/payouts` | + header `Idempotency-Key`; `recipient` |
 | `hubGetPayout` | `GET /api/client-store/payouts/{id}` | `id` = provider id / `external_id` |
 
+> **Catatan Accounts v3 (konfirmasi Xendit, 24 Sep 2026).** Pembuatan sub-akun memakai
+> **`POST /v3/accounts`** (v2 = legacy) dengan `identity.entity_type = INDIVIDUAL` untuk
+> tenant perorangan dan `configuration.webhooks.recipient`
+> (`MASTER_ACCOUNT`/`SUB_ACCOUNT`). Karena verify-on-behalf aktif, undangan email tidak
+> dikirim (`send_email_invite=false`) — KYC disubmit via `POST /account_verification`
+> (`for-user-id`). Syarat: API key berizin **Account Write** + master **enabled xenPlatform**.
+> **Test key:** v3 hanya menerima `CORPORATION` → set `XENDIT_ACCOUNTS_ENTITY_TYPE=CORPORATION`.
+> Env Hub terkait: `XENDIT_ACCOUNTS_ENTITY_TYPE`, `XENDIT_WEBHOOK_RECIPIENT`,
+> `XENDIT_ACCOUNT_COUNTRY`. Aktivasi kanal QRIS/VA manual oleh Master per sub-akun.
+
 ## 3. Webhook Hub → SmartHub
 
 Hub meneruskan **payload Xendit mentah** (bukan `{event_id,type,data}`). SmartHub
@@ -80,7 +90,7 @@ User-Agent, Log ID, hash naskah, dan naskah penuh; diunggah ke `POST /files`, la
 dan mengirim blok `consent` (`version, hash, agreed_at, ip, user_agent, log_id, signer_name`);
 versi/hash di luar naskah berlaku ditolak `422`. Naskah Hub: `agreement_v1.md`.
 
-## 4. Yang ditambahkan di repo Hub (branch `feature/client-store-subaccounts-kyc-payout`)
+## 4. Yang ditambahkan di repo Hub (sudah di-merge ke `main`)
 
 - Model `ClientSubAccount` (store_id, tenant_ref, sub_account_id, status_kyc, kanal) + `Payout`.
 - Handler `client_store_partner.go`: accounts, KYC files/submit, balance, payouts.
@@ -98,3 +108,5 @@ versi/hash di luar naskah berlaku ditolak `422`. Naskah Hub: `agreement_v1.md`.
 | B3 | Prefix `sb-` pada `ClientStore.ExtPrefix` Hub | QRIS/payout ditolak bila tidak cocok |
 | B4 | `for-user-id` untuk balance/payout memerlukan money-out + RSA key | Payout gagal bila belum aktif |
 | B5 | Status pembayaran QRIS `GET /api/payment/qris/:ref` untuk sub-akun | — |
+| B6 | Admin Hub (`GET /v2/accounts` untuk list/status, `partner_admin.go` & `xendit_account_fetch.go`) masih memakai endpoint legacy v2 | Fungsional; pertimbangkan migrasi ke v3 saat tersedia endpoint GET v3 |
+| B7 | Aktivasi kanal QRIS/VA per sub-akun manual (Dashboard/koordinasi Xendit) | QRIS gagal bila kanal belum aktif — sudah dijaga guard kanal |

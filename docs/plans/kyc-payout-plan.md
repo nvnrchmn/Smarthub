@@ -85,8 +85,8 @@ Semua endpoint Hub memakai kredensial internal **`X-Internal-Key`** (diverifikas
 
 | # | Endpoint Hub (final) | Padanan Xendit | Dipakai SmartHub |
 |---|---|---|---|
-| H1 | `POST /api/client-store/accounts` | `POST /v2/accounts` (MANAGED) | Buat sub-akun per `tenant_ref` (legal_name, email, entity_type) |
-| H2 | `GET /api/client-store/accounts/{id}` | `GET /v2/accounts/{id}` | Sinkron status KYC/akun |
+| H1 | `POST /api/client-store/accounts` | `POST /v3/accounts` (MANAGED, `identity.entity_type=INDIVIDUAL`) | Buat sub-akun per `tenant_ref` (name, email, identity, configuration) |
+| H2 | `GET /api/client-store/accounts/{id}` | GET account Xendit | Sinkron status KYC/akun |
 | H3 | `POST /api/client-store/kyc/files` | `POST /files` | Unggah dokumen KYC, balikan `file_id` |
 | H4 | `POST /api/client-store/kyc/submit` | `POST /account_verification` | Kirim data KYC + `file_id` + consent via `for-user-id` |
 | H5 | `POST /api/client-store-qris` | Payment Request QRIS + `for-user-id` | Buat QRIS iuran atas nama sub-akun tenant |
