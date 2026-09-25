@@ -1,10 +1,8 @@
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { ZodError } from "zod";
 
 export const ringkasZodError = (error: ZodError): string =>
-  error.issues
-    .map((issue) => `${issue.path.join(".") || "baris"}: ${issue.message}`)
-    .join("; ");
+  error.issues.map((issue) => `${issue.path.join(".") || "baris"}: ${issue.message}`).join("; ");
 
 export const pesanError = (error: unknown): string =>
   error instanceof Error ? error.message : "Kesalahan tidak diketahui";

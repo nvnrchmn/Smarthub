@@ -1,5 +1,5 @@
 import type { ErrorRequestHandler } from "express";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import multer from "multer";
 import { ZodError } from "zod";
 import { isProduction } from "../../config/environment";

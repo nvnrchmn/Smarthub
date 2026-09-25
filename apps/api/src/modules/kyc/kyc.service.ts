@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { KycInitiateInput, KycSubmitInput } from "@smarthub/shared";
 import {
   bacaKanal,
@@ -136,7 +136,10 @@ export const kycService = {
     const akun = await kycRepository.akunFindByTenant(id_tenant);
     if (!akun?.penyedia_account_id) {
       throw HttpError.unprocessable("Validasi gagal", [
-        { field: "akun_pembayaran", message: "Mulai verifikasi terlebih dahulu sebelum mengunggah dokumen" },
+        {
+          field: "akun_pembayaran",
+          message: "Mulai verifikasi terlebih dahulu sebelum mengunggah dokumen",
+        },
       ]);
     }
 
@@ -148,7 +151,12 @@ export const kycService = {
     return { file_id: hasil.file_id };
   },
 
-  async submit(id_tenant: number, input: KycSubmitInput, meta: { ip?: string | null; userAgent?: string | null }, aktor: Aktor) {
+  async submit(
+    id_tenant: number,
+    input: KycSubmitInput,
+    meta: { ip?: string | null; userAgent?: string | null },
+    aktor: Aktor,
+  ) {
     pastikanHub();
 
     const akun = await kycRepository.akunFindByTenant(id_tenant);
@@ -228,7 +236,9 @@ export const kycService = {
 
   /** Dipanggil webhook Hub saat status verifikasi berubah. */
   async handleVerification(payload: Record<string, unknown>) {
-    const accountId = String(payload.account_id ?? payload.business_id ?? payload.for_user_id ?? "");
+    const accountId = String(
+      payload.account_id ?? payload.business_id ?? payload.for_user_id ?? "",
+    );
     const statusMentah = String(payload.status ?? "");
     const status = STATUS_PETA[statusMentah] ?? "PENDING_VERIFICATION";
 
@@ -237,7 +247,9 @@ export const kycService = {
 
     // Kanal diaktifkan manual oleh penyedia; mock mensimulasikan kanal aktif saat LIVE.
     const kanal =
-      payload.payment_channels ?? payload.channels ?? (isHubMock() && status === "LIVE" ? { qris: true, va: false } : undefined);
+      payload.payment_channels ??
+      payload.channels ??
+      (isHubMock() && status === "LIVE" ? { qris: true, va: false } : undefined);
 
     await kycRepository.akunUpdate(akun.id_akun_pembayaran, {
       status_kyc: status,
