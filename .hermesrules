@@ -1,0 +1,35 @@
+# SmartHub — indeks
+Domain    : smarthub.logikraf.id (Cloudflare DNS -> 103.197.188.248, cert LetsEncrypt ok)
+Repo      : ~/Projects/Smarthub (github nvnrchmn/Smarthub) — menggantikan smarthub-v3 yang dihapus
+Stack     : pnpm monorepo — apps/api (Express 5 + Prisma, tsup ESM), apps/web (Next.js 15 standalone)
+Database  : PostgreSQL 16, db/user `smarthub`, 41 tabel (nama tabel & kolom bahasa Indonesia)
+Layanan   : smarthub-api.service :4000 | smarthub-web.service :3000 | postgresql | nginx
+Deploy    : build-lokal.sh smarthub [build|rilis] — config /etc/build-lokal.d/smarthub.conf
+Webroot   : /www/wwwroot/smarthub.logikraf.id/web = .next/standalone + .next/static + public
+Env       : /www/wwwroot/smarthub.logikraf.id/.env (EnvironmentFile kedua unit)
+Vhost     : /www/server/panel/vhost/nginx/smarthub.logikraf.id.conf (80->301 ; 443 ; /api/ -> 4000)
+Login     : tenant   POST /api/v1/auth/login       {identifier, password}
+            platform POST /api/v1/admin/auth/login {email, password}
+PENTING   : API dijalankan LANGSUNG dari repo (ExecStart apps/api/dist/server.js), bukan dari copy.
+            Menyalin node_modules ke webroot GAGAL — Prisma client hidup di pnpm store,
+            error: Named export 'Prisma' not found (bundle ESM impor modul CJS).
+
+--- ARSIP ---
+
+## 2026-09-25 — SmartHub baru go-live
+Status: SELESAI. Situs live dan bisa login.
+Bukti: / 200, /login 200, /platform 307, /reset-password 200, /api/v1/auth/me 401,
+       login tenant (ketuart@smarthub.local) 200, login platform (admin@smarthub.local) 200,
+       API lokal /health 200, 4 service active.
+Yang dikerjakan:
+- Pull 3 commit (828f427 halaman publik + SEO, 538f188 standar git, 8ed23c0 initial).
+- PostgreSQL 16 dipasang (VPS sebelumnya hanya MySQL); migrate deploy ok.
+- Seed demo dijalankan — DESTRUKTIF (deleteMany di banyak tabel). Dump pengaman:
+  ~/backups/smarthub-predump-20260925-0703.sql . Dibuat 5 akun tenant + 1 AkunPlatform (Superadmin).
+- Sisa smarthub-v3 dipensiunkan ke ~/backups/retired-2026-09-25/ (/opt/smarthub-v3-v3 + unit v3).
+- /etc/build-lokal.d/smarthub.conf ditulis ulang untuk stack Node; rilis diuji penuh -> RILIS OK.
+- Repo commit 494745c "refactor(api): gunakan import type untuk tipe Prisma" sudah dipush.
+Belum / berikutnya:
+- Ganti password akun demo (semua masih Password123) sebelum dipakai nyata.
+- MFA admin, halaman /platform, isi NIB/NPWP.
+- build-lokal.sh belum punya backend `node`; API di-restart lewat HOOK_RILIS (sudah terbukti jalan).
