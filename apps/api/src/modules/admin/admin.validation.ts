@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   adminAkunCreateSchema,
+  adminAkunGantiPasswordSchema,
+  adminAkunResetPasswordSchema,
   adminAkunUpdateSchema,
   adminLoginSchema,
   impersonateSchema,
@@ -33,6 +35,8 @@ export const adminValidation = {
   listAdminAkunQuerySchema,
   adminAkunCreateSchema,
   adminAkunUpdateSchema,
+  adminAkunGantiPasswordSchema,
+  adminAkunResetPasswordSchema,
   impersonateSchema,
   mfaKodeSchema,
   paketKodeParamSchema,

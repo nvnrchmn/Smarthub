@@ -25,7 +25,10 @@ export const adminRepository = {
     prisma.akunPlatform.findUnique({ where: { id_akun_platform } }),
 
   touchLogin: (id_akun_platform: number) =>
-    prisma.akunPlatform.update({ where: { id_akun_platform }, data: { terakhir_masuk: new Date() } }),
+    prisma.akunPlatform.update({
+      where: { id_akun_platform },
+      data: { terakhir_masuk: new Date() },
+    }),
 
   akunList: async ({ skip, take, where, orderBy }: ListParams<Prisma.AkunPlatformWhereInput>) => {
     const [items, total] = await prisma.$transaction([
@@ -35,10 +38,16 @@ export const adminRepository = {
     return { items, total };
   },
 
-  akunCreate: (data: Prisma.AkunPlatformUncheckedCreateInput) => prisma.akunPlatform.create({ data }),
+  akunCreate: (data: Prisma.AkunPlatformUncheckedCreateInput) =>
+    prisma.akunPlatform.create({ data }),
 
   akunUpdate: (id_akun_platform: number, data: Prisma.AkunPlatformUncheckedUpdateInput) =>
     prisma.akunPlatform.update({ where: { id_akun_platform }, data }),
+
+  countSuperadminAktif: () =>
+    prisma.akunPlatform.count({ where: { role: "Superadmin", status_akun: "Aktif" } }),
+
+  countPaketAktif: () => prisma.paketLangganan.count({ where: { aktif: true } }),
 
   tenantKetua: (id_tenant: number) =>
     prisma.akunPengguna.findFirst({
@@ -73,7 +82,12 @@ export const adminRepository = {
     return { items, total };
   },
 
-  webhookList: async ({ skip, take, where, orderBy }: ListParams<Prisma.WebhookEventWhereInput>) => {
+  webhookList: async ({
+    skip,
+    take,
+    where,
+    orderBy,
+  }: ListParams<Prisma.WebhookEventWhereInput>) => {
     const [items, total] = await prisma.$transaction([
       prisma.webhookEvent.findMany({ where, skip, take, orderBy }),
       prisma.webhookEvent.count({ where }),

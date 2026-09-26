@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import type {
   AdminAkunCreateInput,
+  AdminAkunGantiPasswordInput,
+  AdminAkunResetPasswordInput,
   AdminAkunUpdateInput,
   AdminLoginInput,
   ImpersonateInput,
@@ -36,6 +38,19 @@ export const adminController = {
     if (!user) throw HttpError.unauthorized();
     const result = await adminService.me(user.id_akun_platform);
     sendSuccess(res, "Profil akun platform", result);
+  }),
+
+  logout: asyncHandler(async (req: Request, res: Response) => {
+    const { id_akun_platform, email } = aktor(req);
+    const result = await adminService.logout(id_akun_platform, { email });
+    sendSuccess(res, "Logout platform berhasil", result);
+  }),
+
+  gantiPassword: asyncHandler(async (req: Request, res: Response) => {
+    const { id_akun_platform, email } = aktor(req);
+    const body = req.validated?.body as AdminAkunGantiPasswordInput;
+    const result = await adminService.gantiPasswordSendiri(id_akun_platform, body, { email });
+    sendSuccess(res, "Password platform diperbarui", result);
   }),
 
   setupMfa: asyncHandler(async (req: Request, res: Response) => {
@@ -145,6 +160,13 @@ export const adminController = {
     const body = req.validated?.body as AdminAkunUpdateInput;
     const result = await adminService.updateAkun(params.id_akun_platform, body, aktor(req));
     sendSuccess(res, "Akun platform diperbarui", result);
+  }),
+
+  resetPassword: asyncHandler(async (req: Request, res: Response) => {
+    const params = req.validated?.params as { id_akun_platform: number };
+    const body = req.validated?.body as AdminAkunResetPasswordInput;
+    const result = await adminService.resetPassword(params.id_akun_platform, body, aktor(req));
+    sendSuccess(res, "Password akun platform direset", result);
   }),
 
   impersonate: asyncHandler(async (req: Request, res: Response) => {

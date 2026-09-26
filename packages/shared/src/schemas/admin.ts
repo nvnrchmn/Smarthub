@@ -4,7 +4,7 @@ import { paginationQuerySchema } from "./common";
 
 export const adminLoginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Email tidak valid"),
-  password: z.string().min(1, "Password wajib diisi"),
+  password: z.string().min(1, "Password wajib diisi").max(72, "Password terlalu panjang"),
   kode_mfa: z
     .string()
     .trim()
@@ -63,6 +63,22 @@ export const adminAkunUpdateSchema = z.object({
 
 export const impersonateSchema = z.object({
   alasan: z.string().trim().min(5, "Alasan minimal 5 karakter").max(280),
+  // Step-up: wajib kode MFA dari authenticator Superadmin.
+  kode_mfa: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Kode MFA 6 digit"),
+});
+
+/** Ganti password akun platform sendiri (butuh password lama). */
+export const adminAkunGantiPasswordSchema = z.object({
+  password_lama: z.string().min(1, "Password lama wajib diisi").max(72),
+  password_baru: z.string().min(8, "Password baru minimal 8 karakter").max(72),
+});
+
+/** Reset password akun platform lain (khusus Superadmin). */
+export const adminAkunResetPasswordSchema = z.object({
+  password_baru: z.string().min(8, "Password baru minimal 8 karakter").max(72),
 });
 
 export const paketUpdateSchema = z
@@ -70,7 +86,7 @@ export const paketUpdateSchema = z
     nama: z.string().trim().min(2).max(80).optional(),
     harga_bulanan: z.coerce.number().min(0).max(99_999_999).optional(),
     harga_tahunan: z.coerce.number().min(0).max(999_999_999).optional(),
-    batas_rumah: z.coerce.number().int().positive().max(100000).nullable().optional(),
+    batas_rumah: z.coerce.number().int().min(0).max(100000).nullable().optional(),
     fitur: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
     aktif: z.boolean().optional(),
   })
@@ -86,6 +102,8 @@ export type PaketUpdateInput = z.infer<typeof paketUpdateSchema>;
 
 export type AdminAkunCreateInput = z.infer<typeof adminAkunCreateSchema>;
 export type AdminAkunUpdateInput = z.infer<typeof adminAkunUpdateSchema>;
+export type AdminAkunGantiPasswordInput = z.infer<typeof adminAkunGantiPasswordSchema>;
+export type AdminAkunResetPasswordInput = z.infer<typeof adminAkunResetPasswordSchema>;
 export type ListAdminAkunQueryInput = z.infer<typeof listAdminAkunQuerySchema>;
 export type ImpersonateInput = z.infer<typeof impersonateSchema>;
 

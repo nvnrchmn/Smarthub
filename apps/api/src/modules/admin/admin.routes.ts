@@ -20,6 +20,12 @@ adminRouter.post(
 adminRouter.use(authenticatePlatform);
 
 adminRouter.get("/me", adminController.me);
+adminRouter.post("/auth/logout", adminController.logout);
+adminRouter.patch(
+  "/akun/me/password",
+  validate({ body: adminValidation.adminAkunGantiPasswordSchema }),
+  adminController.gantiPassword,
+);
 adminRouter.get("/ringkasan", adminController.ringkasan);
 adminRouter.get("/alert", adminController.alert);
 adminRouter.get("/metrik", adminController.metrik);
@@ -93,6 +99,16 @@ adminRouter.patch(
     body: adminValidation.adminAkunUpdateSchema,
   }),
   adminController.updateAkun,
+);
+
+adminRouter.post(
+  "/akun/:id_akun_platform/reset-password",
+  requirePlatformRole("Superadmin"),
+  validate({
+    params: adminValidation.idAkunPlatformParamSchema,
+    body: adminValidation.adminAkunResetPasswordSchema,
+  }),
+  adminController.resetPassword,
 );
 
 adminRouter.post(

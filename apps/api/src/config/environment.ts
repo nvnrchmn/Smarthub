@@ -13,6 +13,12 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("8h"),
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  // Konsol platform (Superadmin). Rahasia terpisah opsional dari token tenant.
+  JWT_PLATFORM_SECRET: z.string().min(32).optional(),
+  PLATFORM_TOKEN_TTL: z.string().default("8h"),
+  PLATFORM_LOGIN_MAX_GAGAL: z.coerce.number().int().positive().default(10),
+  PLATFORM_LOCKOUT_MENIT: z.coerce.number().int().positive().default(15),
+  IMPERSONASI_MENIT: z.coerce.number().int().positive().default(30),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
   UPLOAD_DIR: z.string().default("uploads"),
   PUBLIC_API_URL: z.string().default("http://localhost:4000"),
@@ -58,6 +64,8 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+/** Rahasia token konsol platform (opsional; fallback ke JWT_SECRET). */
+export const platformJwtSecret = env.JWT_PLATFORM_SECRET ?? env.JWT_SECRET;
 export const isProduction = env.NODE_ENV === "production";
 export const isTest = env.NODE_ENV === "test";
 export const corsOrigins = env.CORS_ORIGIN.split(",")

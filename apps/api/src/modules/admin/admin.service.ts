@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
 import type {
   AdminAkunCreateInput,
+  AdminAkunGantiPasswordInput,
+  AdminAkunResetPasswordInput,
   AdminAkunUpdateInput,
   AdminLoginInput,
   ImpersonateInput,
@@ -20,9 +22,10 @@ import type {
   AuditLog,
   AkunPlatform,
 } from "@prisma/client";
-import { env } from "../../config/environment";
+import { env, platformJwtSecret } from "../../config/environment";
 import { hashPassword, verifyPassword } from "../../config/security";
 import { catatAudit } from "../../common/audit/audit-log";
+import { KODE_FREE } from "../langganan/langganan.fitur";
 import { generateTotpSecret, otpauthUrl, verifyTotp } from "../../common/utils/totp";
 import { HttpError } from "../../common/utils/http-error";
 import { buildMeta, resolveOrderBy, resolvePagination } from "../../common/utils/pagination";
@@ -58,10 +61,12 @@ const presentTenant = (tenant: TenantWithRelations) => ({
     : null,
 });
 
-const presentLangganan = (langganan: LanggananTenant & {
-  tenant: { id_tenant: number; nama: string; slug: string };
-  paket: PaketLangganan;
-}) => ({
+const presentLangganan = (
+  langganan: LanggananTenant & {
+    tenant: { id_tenant: number; nama: string; slug: string };
+    paket: PaketLangganan;
+  },
+) => ({
   id_langganan: langganan.id_langganan,
   id_tenant: langganan.id_tenant,
   tenant: langganan.tenant,
@@ -83,8 +88,6 @@ const presentWebhook = (event: WebhookEvent) => ({
   dibuat_pada: toIso(event.createdAt),
 });
 
-const IMPERSONASI_MENIT = 60;
-
 const presentAkunPlatform = (akun: AkunPlatform) => ({
   id_akun_platform: akun.id_akun_platform,
   nama: akun.nama,
@@ -92,6 +95,7 @@ const presentAkunPlatform = (akun: AkunPlatform) => ({
   role: akun.role,
   status_akun: akun.status_akun,
   mfa_aktif: akun.mfa_aktif,
+  terkunci_sampai: toIso(akun.terkunci_sampai),
   terakhir_masuk: toIso(akun.terakhir_masuk),
   dibuat_pada: toIso(akun.createdAt),
 });
@@ -111,22 +115,51 @@ export const adminService = {
     const akun = await adminRepository.akunByEmail(input.email);
     if (!akun) throw HttpError.unauthorized("Email atau password salah");
 
+    if (akun.terkunci_sampai && akun.terkunci_sampai.getTime() > Date.now()) {
+      const menit = Math.max(1, Math.ceil((akun.terkunci_sampai.getTime() - Date.now()) / 60_000));
+      throw HttpError.forbidden(`Akun terkunci sementara. Coba lagi dalam ${menit} menit.`);
+    }
+
     const cocok = await verifyPassword(input.password, akun.password_hash);
-    if (!cocok) throw HttpError.unauthorized("Email atau password salah");
+    if (!cocok) {
+      const gagal = akun.gagal_login + 1;
+      const kunci =
+        gagal >= env.PLATFORM_LOGIN_MAX_GAGAL
+          ? new Date(Date.now() + env.PLATFORM_LOCKOUT_MENIT * 60_000)
+          : null;
+      await adminRepository.akunUpdate(akun.id_akun_platform, {
+        gagal_login: gagal,
+        ...(kunci ? { terkunci_sampai: kunci } : {}),
+      });
+      await adminRepository.auditCreate({
+        id_akun_platform: akun.id_akun_platform,
+        aktor_email: akun.email,
+        aksi: "login_platform_gagal",
+        entitas: "AkunPlatform",
+        id_entitas: String(akun.id_akun_platform),
+        detail: { gagal, dikunci: Boolean(kunci) },
+      });
+      throw HttpError.unauthorized("Email atau password salah");
+    }
 
     if (akun.status_akun === "Nonaktif") {
       throw HttpError.forbidden("Akun platform nonaktif");
     }
 
-    if (akun.mfa_aktif) {
+    // Bila MFA pernah di-setup (walau belum diaktifkan), verifikasi tetap wajib.
+    if (akun.mfa_secret) {
       if (!input.kode_mfa) {
         throw HttpError.unauthorized("Kode MFA diperlukan");
       }
-      if (!akun.mfa_secret || !verifyTotp(akun.mfa_secret, input.kode_mfa)) {
+      if (!verifyTotp(akun.mfa_secret, input.kode_mfa)) {
         throw HttpError.unauthorized("Kode MFA salah");
       }
     }
 
+    await adminRepository.akunUpdate(akun.id_akun_platform, {
+      gagal_login: 0,
+      terkunci_sampai: null,
+    });
     await adminRepository.touchLogin(akun.id_akun_platform);
 
     const token = jwt.sign(
@@ -135,15 +168,37 @@ export const adminService = {
         email: akun.email,
         role: akun.role,
         scope: "platform",
+        token_version: akun.token_version,
       },
-      env.JWT_SECRET,
-      { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"] },
+      platformJwtSecret,
+      { expiresIn: env.PLATFORM_TOKEN_TTL as jwt.SignOptions["expiresIn"] },
     );
 
     return {
       token,
-      akun: { id_akun_platform: akun.id_akun_platform, nama: akun.nama, email: akun.email, role: akun.role },
+      akun: {
+        id_akun_platform: akun.id_akun_platform,
+        nama: akun.nama,
+        email: akun.email,
+        role: akun.role,
+      },
     };
+  },
+
+  /** Logout: menaikkan `token_version` sehingga seluruh token lama batal. */
+  async logout(id_akun_platform: number, aktor: { email: string }) {
+    const akun = await adminRepository.akunById(id_akun_platform);
+    if (!akun) throw HttpError.notFound("Akun platform tidak ditemukan");
+
+    await adminRepository.akunUpdate(id_akun_platform, { token_version: akun.token_version + 1 });
+    await catatAudit({
+      id_akun_platform,
+      aktor_email: aktor.email,
+      aksi: "logout_platform",
+      entitas: "AkunPlatform",
+      id_entitas: String(id_akun_platform),
+    });
+    return { keluar: true };
   },
 
   async me(id_akun_platform: number) {
@@ -162,8 +217,14 @@ export const adminService = {
   async ringkasan() {
     const data = await adminRepository.ringkasan();
     return {
-      tenant_per_status: data.tenantPerStatus.map((item) => ({ status: item.status, jumlah: item._count._all })),
-      langganan_per_status: data.langgananPerStatus.map((item) => ({ status: item.status, jumlah: item._count._all })),
+      tenant_per_status: data.tenantPerStatus.map((item) => ({
+        status: item.status,
+        jumlah: item._count._all,
+      })),
+      langganan_per_status: data.langgananPerStatus.map((item) => ({
+        status: item.status,
+        jumlah: item._count._all,
+      })),
       pembayaran_qris: {
         jumlah_transaksi: data.pembayaran._count._all,
         total_pembayaran: toMoney(data.pembayaran._sum.jumlah),
@@ -194,6 +255,21 @@ export const adminService = {
   ) {
     const paket = await adminRepository.paketFindByKode(kode);
     if (!paket) throw HttpError.notFound("Paket langganan tidak ditemukan");
+
+    if (
+      kode === KODE_FREE &&
+      ((input.harga_bulanan !== undefined && Number(input.harga_bulanan) !== 0) ||
+        (input.harga_tahunan !== undefined && Number(input.harga_tahunan) !== 0))
+    ) {
+      throw HttpError.badRequest("Paket Gratis harus tetap berharga 0");
+    }
+
+    if (input.aktif === false && paket.aktif) {
+      const jumlahAktif = await adminRepository.countPaketAktif();
+      if (jumlahAktif <= 1) {
+        throw HttpError.badRequest("Minimal harus ada satu paket langganan aktif");
+      }
+    }
 
     const diubah = await adminRepository.paketUpdate(kode, {
       ...(input.nama !== undefined ? { nama: input.nama } : {}),
@@ -339,9 +415,7 @@ export const adminService = {
     const orderBy = resolveOrderBy(sort, { createdAt: "desc" });
     const where = {
       ...(query.status ? { status: query.status } : {}),
-      ...(query.q
-        ? { nama: { contains: query.q, mode: "insensitive" as const } }
-        : {}),
+      ...(query.q ? { nama: { contains: query.q, mode: "insensitive" as const } } : {}),
     };
     const { items, total } = await adminRepository.tenantList({ skip, take, where, orderBy });
     return { data: items.map(presentTenant), meta: buildMeta(page, limit, total) };
@@ -455,10 +529,26 @@ export const adminService = {
       throw HttpError.badRequest("Anda tidak dapat menonaktifkan akun Anda sendiri");
     }
 
+    // Cegah lockout: jangan sampai tidak ada Superadmin aktif yang tersisa.
+    const iniSuperAktif = akun.role === "Superadmin" && akun.status_akun === "Aktif";
+    const akanNonaktif = input.status_akun === "Nonaktif";
+    const akanTurunRole = input.role !== undefined && input.role !== "Superadmin";
+    if (iniSuperAktif && (akanNonaktif || akanTurunRole)) {
+      const jumlahSuper = await adminRepository.countSuperadminAktif();
+      if (jumlahSuper <= 1) {
+        throw HttpError.badRequest(
+          "Minimal harus ada satu Superadmin aktif. Angkat Superadmin lain terlebih dahulu.",
+        );
+      }
+    }
+
+    const perluCabutToken = input.role !== undefined || input.status_akun !== undefined;
     const diubah = await adminRepository.akunUpdate(id_akun_platform, {
       ...(input.nama ? { nama: input.nama } : {}),
       ...(input.role ? { role: input.role } : {}),
       ...(input.status_akun ? { status_akun: input.status_akun } : {}),
+      ...(perluCabutToken ? { token_version: akun.token_version + 1 } : {}),
+      ...(akanNonaktif ? { gagal_login: 0, terkunci_sampai: null } : {}),
     });
 
     await adminRepository.auditCreate({
@@ -473,6 +563,60 @@ export const adminService = {
     return presentAkunPlatform(diubah);
   },
 
+  /** Ganti password akun platform sendiri (memverifikasi password lama). */
+  async gantiPasswordSendiri(
+    id_akun_platform: number,
+    input: AdminAkunGantiPasswordInput,
+    aktor: { email: string },
+  ) {
+    const akun = await adminRepository.akunById(id_akun_platform);
+    if (!akun) throw HttpError.notFound("Akun platform tidak ditemukan");
+
+    if (!(await verifyPassword(input.password_lama, akun.password_hash))) {
+      throw HttpError.unprocessable("Validasi gagal", [
+        { field: "password_lama", message: "Password lama salah" },
+      ]);
+    }
+
+    await adminRepository.akunUpdate(id_akun_platform, {
+      password_hash: await hashPassword(input.password_baru),
+      token_version: akun.token_version + 1,
+    });
+    await catatAudit({
+      id_akun_platform,
+      aktor_email: aktor.email,
+      aksi: "ganti_password_platform",
+      entitas: "AkunPlatform",
+      id_entitas: String(id_akun_platform),
+    });
+    return { diubah: true };
+  },
+
+  /** Reset password akun platform lain (khusus Superadmin). */
+  async resetPassword(
+    id_akun_platform: number,
+    input: AdminAkunResetPasswordInput,
+    aktor: { id_akun_platform: number; email: string },
+  ) {
+    const akun = await adminRepository.akunById(id_akun_platform);
+    if (!akun) throw HttpError.notFound("Akun platform tidak ditemukan");
+
+    await adminRepository.akunUpdate(id_akun_platform, {
+      password_hash: await hashPassword(input.password_baru),
+      token_version: akun.token_version + 1,
+      gagal_login: 0,
+      terkunci_sampai: null,
+    });
+    await catatAudit({
+      id_akun_platform: aktor.id_akun_platform,
+      aktor_email: aktor.email,
+      aksi: "reset_password_platform",
+      entitas: "AkunPlatform",
+      id_entitas: String(id_akun_platform),
+    });
+    return { direset: true };
+  },
+
   async impersonate(
     id_tenant: number,
     input: ImpersonateInput,
@@ -481,6 +625,23 @@ export const adminService = {
     const tenant = await adminRepository.tenantFindById(id_tenant);
     if (!tenant) throw HttpError.notFound("Tenant tidak ditemukan");
 
+    // Step-up: impersonasi hanya boleh oleh Superadmin ber-MFA, dengan kode valid.
+    const superAdmin = await adminRepository.akunById(aktor.id_akun_platform);
+    if (!superAdmin) throw HttpError.unauthorized();
+    if (!superAdmin.mfa_aktif || !superAdmin.mfa_secret) {
+      throw HttpError.unprocessable("Validasi gagal", [
+        {
+          field: "kode_mfa",
+          message: "Aktifkan MFA terlebih dahulu untuk menggunakan impersonasi",
+        },
+      ]);
+    }
+    if (!verifyTotp(superAdmin.mfa_secret, input.kode_mfa)) {
+      throw HttpError.unprocessable("Validasi gagal", [
+        { field: "kode_mfa", message: "Kode MFA salah" },
+      ]);
+    }
+
     const ketua = await adminRepository.tenantKetua(id_tenant);
     if (!ketua) {
       throw HttpError.unprocessable("Validasi gagal", [
@@ -488,17 +649,17 @@ export const adminService = {
       ]);
     }
 
+    // Token tenant (diverifikasi `auth.middleware` dengan JWT_SECRET), tanpa NIK.
     const token = jwt.sign(
       {
         id_pengguna: ketua.id_pengguna,
-        nik: ketua.nik ?? "",
         role: ketua.role,
         id_tenant,
         scope: "impersonation",
         impersonated_by: aktor.id_akun_platform,
       },
       env.JWT_SECRET,
-      { expiresIn: `${IMPERSONASI_MENIT}m` },
+      { expiresIn: `${env.IMPERSONASI_MENIT}m` },
     );
 
     await adminRepository.auditCreate({
@@ -507,12 +668,16 @@ export const adminService = {
       aksi: "impersonasi_tenant",
       entitas: "Tenant",
       id_entitas: String(id_tenant),
-      detail: { alasan: input.alasan, id_pengguna: ketua.id_pengguna, menit: IMPERSONASI_MENIT },
+      detail: {
+        alasan: input.alasan,
+        id_pengguna: ketua.id_pengguna,
+        menit: env.IMPERSONASI_MENIT,
+      },
     });
 
     return {
       token,
-      berlaku_menit: IMPERSONASI_MENIT,
+      berlaku_menit: env.IMPERSONASI_MENIT,
       id_tenant,
       pengguna: {
         id_pengguna: ketua.id_pengguna,
@@ -534,11 +699,7 @@ export const adminService = {
     return { secret, otpauth_url: otpauthUrl(secret, akun.email) };
   },
 
-  async activateMfa(
-    id_akun_platform: number,
-    kode: string,
-    aktor: { email: string },
-  ) {
+  async activateMfa(id_akun_platform: number, kode: string, aktor: { email: string }) {
     const akun = await adminRepository.akunById(id_akun_platform);
     if (!akun) throw HttpError.notFound("Akun platform tidak ditemukan");
     if (!akun.mfa_secret) {
@@ -547,7 +708,9 @@ export const adminService = {
       ]);
     }
     if (!verifyTotp(akun.mfa_secret, kode)) {
-      throw HttpError.unprocessable("Validasi gagal", [{ field: "kode", message: "Kode MFA salah" }]);
+      throw HttpError.unprocessable("Validasi gagal", [
+        { field: "kode", message: "Kode MFA salah" },
+      ]);
     }
 
     await adminRepository.akunUpdate(id_akun_platform, { mfa_aktif: true });
@@ -569,7 +732,9 @@ export const adminService = {
       throw HttpError.conflict("MFA belum aktif untuk akun ini");
     }
     if (!verifyTotp(akun.mfa_secret, kode)) {
-      throw HttpError.unprocessable("Validasi gagal", [{ field: "kode", message: "Kode MFA salah" }]);
+      throw HttpError.unprocessable("Validasi gagal", [
+        { field: "kode", message: "Kode MFA salah" },
+      ]);
     }
 
     await adminRepository.akunUpdate(id_akun_platform, { mfa_aktif: false, mfa_secret: null });

@@ -1,7 +1,8 @@
 import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import type { PlatformRole } from "@smarthub/shared";
-import { env } from "../../config/environment";
+import { platformJwtSecret } from "../../config/environment";
+import { adminRepository } from "../../modules/admin/admin.repository";
 import { HttpError } from "../utils/http-error";
 
 interface PlatformJwt {
@@ -9,9 +10,15 @@ interface PlatformJwt {
   email: string;
   role: PlatformRole;
   scope: string;
+  token_version?: number;
 }
 
-export const authenticatePlatform: RequestHandler = (req, _res, next) => {
+/**
+ * Autentikasi konsol platform. Selain memverifikasi tanda tangan token, status
+ * akun dan `token_version` **dicek ulang ke database** agar akun yang dinonaktifkan,
+ * dihapus, atau berubah role tidak tetap berlaku sampai token kedaluwarsa.
+ */
+export const authenticatePlatform: RequestHandler = async (req, _res, next) => {
   const header = req.headers.authorization;
 
   if (!header || !header.startsWith("Bearer ")) {
@@ -19,20 +26,43 @@ export const authenticatePlatform: RequestHandler = (req, _res, next) => {
     return;
   }
 
+  let payload: PlatformJwt;
   try {
-    const payload = jwt.verify(header.slice("Bearer ".length).trim(), env.JWT_SECRET) as PlatformJwt;
-    if (payload.scope !== "platform") {
-      next(HttpError.unauthorized("Token bukan token platform"));
-      return;
-    }
-    req.platform_user = {
-      id_akun_platform: payload.id_akun_platform,
-      email: payload.email,
-      role: payload.role,
-    };
-    next();
+    payload = jwt.verify(header.slice("Bearer ".length).trim(), platformJwtSecret) as PlatformJwt;
   } catch {
     next(HttpError.unauthorized("Token platform tidak valid atau kedaluwarsa"));
+    return;
+  }
+
+  if (payload.scope !== "platform" || typeof payload.id_akun_platform !== "number") {
+    next(HttpError.unauthorized("Token bukan token platform"));
+    return;
+  }
+
+  try {
+    const akun = await adminRepository.akunById(payload.id_akun_platform);
+    if (!akun) {
+      next(HttpError.unauthorized("Akun platform tidak ditemukan"));
+      return;
+    }
+    if (akun.status_akun === "Nonaktif") {
+      next(HttpError.forbidden("Akun platform nonaktif"));
+      return;
+    }
+    if ((payload.token_version ?? 0) !== akun.token_version) {
+      next(HttpError.unauthorized("Sesi platform sudah tidak berlaku, silakan login kembali"));
+      return;
+    }
+
+    // Role diambil dari DB (bukan dari token) agar perubahan role langsung berlaku.
+    req.platform_user = {
+      id_akun_platform: akun.id_akun_platform,
+      email: akun.email,
+      role: akun.role as PlatformRole,
+    };
+    next();
+  } catch (error) {
+    next(error);
   }
 };
 

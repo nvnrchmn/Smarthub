@@ -846,6 +846,11 @@ model AkunPlatform {
   mfa_secret       String?
   mfa_aktif        Boolean     @default(false)
   terakhir_masuk   DateTime?
+  /// Dinaikkan saat logout/ubah role/ubah status/ganti password → token lama batal.
+  token_version    Int         @default(0)
+  /// Penghitung gagal login & kunci sementara (anti brute-force per akun).
+  gagal_login      Int         @default(0)
+  terkunci_sampai  DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   audit            AuditLog[]

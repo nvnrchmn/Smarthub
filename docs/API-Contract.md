@@ -1811,7 +1811,9 @@ Membuka kembali settlement yang gagal dari `processing` ke `pending`.
 
 ## 11. Modul Konsol Platform (`/api/v1/admin`)
 
-> **Status: TARGET.** Seluruh endpoint pada bab ini **belum ada di kode** (UC-36, UC-37). Akses memakai peran platform (`AkunPlatform`) dan bukan peran RT.
+> **Status: SUDAH ADA (revisi 2026-09-26).** Akses memakai peran platform `AkunPlatform` (`Superadmin` | `Operator`), bukan peran RT. Endpoint tulis dibatasi `Superadmin` via `requirePlatformRole`.
+>
+> **Pengerasan keamanan (2026-09-26).** Setiap request memverifikasi ulang akun ke DB: akun `Nonaktif`/dihapus atau `token_version` yang tak cocok ditolak (`401/403`), dan **role diambil dari DB** (bukan dari token). `POST /admin/auth/logout`, ubah role/status, serta ganti/reset password menaikkan `token_version` sehingga token lama batal. Login mengunci sementara akun setelah 10 gagal (`PLATFORM_LOGIN_MAX_GAGAL`, 15 menit) dan **mewajibkan kode MFA bila `mfa_secret` sudah ada**. Impersonasi kini **wajib MFA aktif + kode MFA** (step-up), berlaku **30 menit**, read-only, dan tokennya **tanpa NIK**. Penangguhan tenant (`Ditangguhkan`/`Dibatalkan`) **memutus akses seluruh pengguna tenant** (ditegakkan di `requireTenant`).
 
 ### Ringkasan Endpoint
 
@@ -1825,8 +1827,12 @@ Membuka kembali settlement yang gagal dari `processing` ke `pending`.
 | 11.6 | GET | `/admin/audit-log/:id_audit` | Owner, Admin, Support | UC-37 | Detail audit log |
 | 11.7 | POST | `/admin/impersonasi` | Owner, Admin, Support | UC-37 | Mulai impersonasi terbatas |
 | 11.8 | DELETE | `/admin/impersonasi/:id_sesi` | Owner, Admin, Support | UC-37 | Akhiri impersonasi |
-| 11.9 | GET | `/admin/paket` | Platform_Owner | – | Daftar paket langganan |
-| 11.10 | PATCH | `/admin/paket/:kode` | Platform_Owner | – | Ubah harga/fitur paket |
+| 11.9 | GET | `/admin/paket` | Superadmin, Operator | – | Daftar paket langganan |
+| 11.10 | PATCH | `/admin/paket/:kode` | Superadmin | – | Ubah harga/fitur paket |
+| 11.11 | POST | `/admin/auth/logout` | Superadmin, Operator | – | Logout & cabut token (naikkan `token_version`) |
+| 11.12 | PATCH | `/admin/akun/me/password` | Superadmin, Operator | – | Ganti password sendiri (`password_lama`, `password_baru`) |
+| 11.13 | POST | `/admin/akun/:id_akun_platform/reset-password` | Superadmin | – | Reset password akun platform lain |
+| 11.14 | POST | `/admin/auth/mfa/setup` \| `/activate` \| `/disable` | Superadmin, Operator | – | Kelola MFA TOTP akun platform |
 
 ### 11.1–11.2 Daftar & Detail Tenant (TARGET)
 

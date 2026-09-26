@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { prisma } from "../src/config/database";
-import { totpSekarang } from "../src/common/utils/totp";
+import { generateTotpSecret, totpSekarang } from "../src/common/utils/totp";
 import { adminService } from "../src/modules/admin/admin.service";
 import { authService } from "../src/modules/auth/auth.service";
 import { tenantService } from "../src/modules/tenant/tenant.service";
@@ -19,6 +19,7 @@ let id_akun_platform = 0;
 let id_tenant = 0;
 let platformToken = "";
 let tenantToken = "";
+let mfaSecret = "";
 
 beforeAll(async () => {
   await prisma.paketLangganan.upsert({
@@ -44,7 +45,18 @@ beforeAll(async () => {
   });
   id_akun_platform = akun.id_akun_platform;
 
-  const login = await adminService.login({ email: adminEmail, password: "Password123" });
+  // Aktifkan MFA sejak awal: impersonasi & login mewajibkan kode MFA.
+  mfaSecret = generateTotpSecret();
+  await prisma.akunPlatform.update({
+    where: { id_akun_platform },
+    data: { mfa_secret: mfaSecret, mfa_aktif: true },
+  });
+
+  const login = await adminService.login({
+    email: adminEmail,
+    password: "Password123",
+    kode_mfa: totpSekarang(mfaSecret),
+  });
   platformToken = login.token;
 
   const tenant = await tenantService.create({
@@ -63,7 +75,8 @@ beforeAll(async () => {
   });
   id_tenant = tenant.id_tenant;
 
-  tenantToken = (await authService.login({ identifier: ketuaEmail, password: "Password123" })).token;
+  tenantToken = (await authService.login({ identifier: ketuaEmail, password: "Password123" }))
+    .token;
 });
 
 afterAll(async () => {
@@ -99,6 +112,14 @@ describe("Konsol platform (Superadmin)", () => {
     });
     expect(audit?.aksi).toBe("ubah_status_tenant");
     expect(audit?.aktor_email).toBe(adminEmail);
+
+    // Penangguhan harus benar-benar memutus akses tenant, lalu diaktifkan kembali.
+    const saatDitangguhkan = await request(app)
+      .get("/api/v1/wilayah/rumah")
+      .set("Authorization", `Bearer ${tenantToken}`);
+    expect(saatDitangguhkan.status).toBe(403);
+
+    await prisma.tenant.update({ where: { id_tenant }, data: { status: "Aktif" } });
   });
 
   it("mengelola akun platform (buat, daftar, ubah status) dengan audit", async () => {
@@ -127,10 +148,10 @@ describe("Konsol platform (Superadmin)", () => {
   it("impersonasi memberi token tenant berbatas waktu dan tercatat", async () => {
     const hasil = await adminService.impersonate(
       id_tenant,
-      { alasan: "Dukungan pelanggan uji" },
+      { alasan: "Dukungan pelanggan uji", kode_mfa: totpSekarang(mfaSecret) },
       { id_akun_platform, email: adminEmail },
     );
-    expect(hasil.berlaku_menit).toBe(60);
+    expect(hasil.berlaku_menit).toBe(30);
 
     const respons = await request(app)
       .get("/api/v1/wilayah/rumah")
@@ -152,7 +173,7 @@ describe("Konsol platform (Superadmin)", () => {
   it("impersonasi bersifat read-only dan mencatat percobaan tulis", async () => {
     const hasil = await adminService.impersonate(
       id_tenant,
-      { alasan: "Uji batas read-only" },
+      { alasan: "Uji batas read-only", kode_mfa: totpSekarang(mfaSecret) },
       { id_akun_platform, email: adminEmail },
     );
 
@@ -220,14 +241,7 @@ describe("Konsol platform (Superadmin)", () => {
     expect(audit).not.toBeNull();
   });
 
-  it("mengaktifkan MFA TOTP dan mewajibkan kode saat login", async () => {
-    const setup = await adminService.setupMfa(id_akun_platform);
-    expect(setup.secret.length).toBeGreaterThan(10);
-
-    await adminService.activateMfa(id_akun_platform, totpSekarang(setup.secret), {
-      email: adminEmail,
-    });
-
+  it("mewajibkan kode MFA saat login", async () => {
     const me = await adminService.me(id_akun_platform);
     expect(me.mfa_aktif).toBe(true);
 
@@ -238,12 +252,49 @@ describe("Konsol platform (Superadmin)", () => {
     const login = await adminService.login({
       email: adminEmail,
       password: "Password123",
-      kode_mfa: totpSekarang(setup.secret),
+      kode_mfa: totpSekarang(mfaSecret),
     });
     expect(login.token).not.toBe("");
 
-    await adminService.disableMfa(id_akun_platform, totpSekarang(setup.secret), {
+    await adminService.disableMfa(id_akun_platform, totpSekarang(mfaSecret), {
       email: adminEmail,
     });
+  });
+
+  it("impersonasi menolak tanpa kode MFA yang valid", async () => {
+    await prisma.akunPlatform.update({
+      where: { id_akun_platform },
+      data: { mfa_secret: mfaSecret, mfa_aktif: true },
+    });
+
+    try {
+      await expect(
+        adminService.impersonate(
+          id_tenant,
+          { alasan: "Tanpa kode MFA", kode_mfa: "000000" },
+          { id_akun_platform, email: adminEmail },
+        ),
+      ).rejects.toThrow(/Validasi gagal/);
+    } finally {
+      await prisma.akunPlatform.update({
+        where: { id_akun_platform },
+        data: { mfa_secret: null, mfa_aktif: false },
+      });
+    }
+  });
+
+  it("logout mencabut token platform (token_version naik)", async () => {
+    const login = await adminService.login({ email: adminEmail, password: "Password123" });
+    const sebelum = await request(app)
+      .get("/api/v1/admin/ringkasan")
+      .set("Authorization", `Bearer ${login.token}`);
+    expect(sebelum.status).toBe(200);
+
+    await adminService.logout(id_akun_platform, { email: adminEmail });
+
+    const sesudah = await request(app)
+      .get("/api/v1/admin/ringkasan")
+      .set("Authorization", `Bearer ${login.token}`);
+    expect(sesudah.status).toBe(401);
   });
 });
