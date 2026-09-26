@@ -170,3 +170,30 @@ export const NAV_ITEMS: NavItem[] = [
 
 export const navItemsForRole = (role: Role): NavItem[] =>
   NAV_ITEMS.filter((item) => item.roles.includes(role));
+
+/**
+ * Destinasi utama untuk bottom tab bar (mobile) per peran — maksimal 4.
+ * Hanya memilih dari item yang memang boleh diakses peran tsb; sisanya
+ * tetap tersedia lewat menu "Lainnya". Tidak mengubah NAV_ITEMS.
+ */
+const TAB_PRIORITY: Record<Role, string[]> = {
+  Ketua_RT: ["/dashboard", "/keuangan/kas", "/pencairan", "/marketplace"],
+  Sekretaris: ["/dashboard", "/kependudukan/warga", "/keuangan/kas", "/diskusi"],
+  Bendahara: ["/dashboard", "/keuangan/iuran", "/keuangan/kas", "/pencairan"],
+  Keamanan: ["/keamanan/tamu", "/diskusi", "/marketplace", "/pengaturan/notifikasi"],
+  Warga: ["/dashboard", "/warga/tagihan", "/keuangan/kas", "/marketplace"],
+};
+
+export const primaryTabsForRole = (role: Role): NavItem[] => {
+  const allowed = navItemsForRole(role);
+  const picks: NavItem[] = [];
+  for (const href of TAB_PRIORITY[role] ?? []) {
+    const item = allowed.find((entry) => entry.href === href);
+    if (item && !picks.some((p) => p.href === item.href)) picks.push(item);
+  }
+  for (const item of allowed) {
+    if (picks.length >= 4) break;
+    if (!picks.some((p) => p.href === item.href)) picks.push(item);
+  }
+  return picks.slice(0, 4);
+};

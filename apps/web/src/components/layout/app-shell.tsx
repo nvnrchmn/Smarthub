@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Menu, UserRound } from "lucide-react";
+import { LogOut, UserRound } from "lucide-react";
 import { ROLE_LABELS } from "@smarthub/shared";
 import type { Me } from "@/hooks/use-me";
 import { navItemsForRole } from "@/lib/navigation";
@@ -17,9 +18,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { NotificationBell } from "@/components/notifikasi/notification-bell";
+import { NavList } from "@/components/layout/nav-list";
+import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 
 const Brand = () => (
   <Link href="/" className="flex items-center gap-2 px-2 py-1">
@@ -30,39 +32,41 @@ const Brand = () => (
   </Link>
 );
 
-const NavList = ({ me, onNavigate }: { me: Me; onNavigate?: () => void }) => {
-  const pathname = usePathname();
-  const items = navItemsForRole(me.role);
+const EXTRA_TITLES: Record<string, string> = {
+  "/profil": "Profil & Password",
+  "/platform": "Portal Platform",
+};
 
-  return (
-    <nav className="flex flex-col gap-1">
-      {items.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-            )}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            <span className="truncate">{item.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
-  );
+const resolveTitle = (pathname: string, role: Me["role"]): string => {
+  const match = navItemsForRole(role)
+    .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  return match?.label ?? EXTRA_TITLES[pathname] ?? "SmartHub";
 };
 
 export const AppShell = ({ me, children }: { me: Me; children: React.ReactNode }) => {
   const router = useRouter();
+  const pathname = usePathname();
+  const [scrolled, setScrolled] = useState(false);
   const displayName = me.nama_lengkap ?? me.email;
+  const title = resolveTitle(pathname, me.role);
+
+  useEffect(() => {
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        setScrolled(window.scrollY > 8);
+        raf = 0;
+      });
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (raf) window.cancelAnimationFrame(raf);
+    };
+  }, []);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -76,7 +80,7 @@ export const AppShell = ({ me, children }: { me: Me; children: React.ReactNode }
         <Brand />
         <Separator />
         <div className="flex-1 overflow-y-auto">
-          <NavList me={me} />
+          <NavList me={me} layoutIdPrefix="sidebar" />
         </div>
         <Separator />
         <div className="px-3 text-xs text-muted-foreground">
@@ -87,26 +91,30 @@ export const AppShell = ({ me, children }: { me: Me; children: React.ReactNode }
       </aside>
 
       <div className="flex min-h-dvh flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Buka menu">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-72">
-                <SheetHeader>
-                  <SheetTitle>Menu SmartHub</SheetTitle>
-                </SheetHeader>
-                <div className="mt-4">
-                  <NavList me={me} />
-                </div>
-              </SheetContent>
-            </Sheet>
-            <div className="lg:hidden">
-              <Brand />
-            </div>
+        <header
+          className={cn(
+            "sticky top-0 z-30 flex items-center justify-between gap-2 border-b px-4 backdrop-blur transition-[padding,background-color,border-color] duration-300 ease-ios lg:px-8",
+            scrolled
+              ? "border-border bg-background/85 py-2"
+              : "border-transparent bg-background/60 py-3",
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Link
+              href="/"
+              aria-label="SmartHub"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground transition-transform duration-200 ease-ios active:scale-90 lg:hidden"
+            >
+              SH
+            </Link>
+            <h1
+              className={cn(
+                "truncate font-bold tracking-tight transition-all duration-300 ease-ios",
+                scrolled ? "text-base" : "text-xl",
+              )}
+            >
+              {title}
+            </h1>
           </div>
 
           <div className="flex items-center gap-1">
@@ -137,7 +145,9 @@ export const AppShell = ({ me, children }: { me: Me; children: React.ReactNode }
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 lg:px-8">{children}</main>
+        <main className="flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-8 lg:pt-6">{children}</main>
+
+        <MobileTabBar me={me} />
       </div>
     </div>
   );

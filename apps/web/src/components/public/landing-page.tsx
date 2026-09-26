@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicSiteFooter } from "@/components/public/public-site-footer";
 import { PublicSiteHeader } from "@/components/public/public-site-header";
+import { PricingSection } from "@/components/public/pricing-section";
+import { ScrollReveal } from "@/components/public/scroll-reveal";
 
 const FEATURES = [
   {
@@ -269,7 +271,7 @@ export const LandingPage = () => (
 
       {/* Stats */}
       <section className="border-b border-border/60 bg-muted/20">
-        <div className="container grid grid-cols-2 gap-6 py-10 md:grid-cols-4">
+        <div className="container grid grid-cols-2 gap-6 py-10 md:grid-cols-4" data-reveal>
           {STATS.map((stat) => (
             <div key={stat.label} className="text-center">
               <p className="text-2xl font-bold tracking-tight sm:text-3xl">{stat.value}</p>
@@ -281,7 +283,7 @@ export const LandingPage = () => (
 
       {/* Features */}
       <section id="fitur" className="scroll-mt-20 py-16 lg:py-24">
-        <div className="container space-y-12">
+        <div className="container space-y-12" data-reveal>
           <div className="mx-auto max-w-2xl space-y-3 text-center">
             <Badge variant="secondary">Fitur</Badge>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -317,7 +319,7 @@ export const LandingPage = () => (
         id="cara-kerja"
         className="scroll-mt-20 border-y border-border/60 bg-muted/20 py-16 lg:py-24"
       >
-        <div className="container space-y-12">
+        <div className="container space-y-12" data-reveal>
           <div className="mx-auto max-w-2xl space-y-3 text-center">
             <Badge variant="secondary">Cara Kerja</Badge>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -330,7 +332,7 @@ export const LandingPage = () => (
           <ol className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, index) => (
               <li key={step.title} className="relative">
-                <Card className="h-full">
+                <Card className="h-full transition-all duration-200 ease-ios hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
                   <CardHeader className="space-y-3">
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
                       {index + 1}
@@ -347,9 +349,12 @@ export const LandingPage = () => (
         </div>
       </section>
 
+      {/* Paket & Harga */}
+      <PricingSection />
+
       {/* Peran */}
       <section id="peran" className="scroll-mt-20 py-16 lg:py-24">
-        <div className="container grid gap-12 lg:grid-cols-2 lg:items-center">
+        <div className="container grid gap-12 lg:grid-cols-2 lg:items-center" data-reveal>
           <div className="space-y-3">
             <Badge variant="secondary">Peran & Hak Akses</Badge>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -369,7 +374,10 @@ export const LandingPage = () => (
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {ROLES.map((role) => (
-              <div key={role.role} className="rounded-lg border border-border/60 bg-card p-4">
+              <div
+                key={role.role}
+                className="rounded-lg border border-border/60 bg-card p-4 transition-all duration-200 ease-ios hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
+              >
                 <p className="font-medium">{role.role}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{role.description}</p>
               </div>
@@ -383,7 +391,7 @@ export const LandingPage = () => (
         id="keamanan"
         className="scroll-mt-20 border-y border-border/60 bg-muted/20 py-16 lg:py-24"
       >
-        <div className="container space-y-12">
+        <div className="container space-y-12" data-reveal>
           <div className="mx-auto max-w-2xl space-y-3 text-center">
             <Badge variant="secondary">Keamanan & Kepatuhan</Badge>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -398,7 +406,7 @@ export const LandingPage = () => (
             {SECURITY_POINTS.map((point) => (
               <div
                 key={point.title}
-                className="flex gap-4 rounded-lg border border-border/60 bg-card p-5"
+                className="flex gap-4 rounded-lg border border-border/60 bg-card p-5 transition-all duration-200 ease-ios hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <point.icon className="h-5 w-5" aria-hidden="true" />
@@ -415,7 +423,7 @@ export const LandingPage = () => (
 
       {/* FAQ */}
       <section id="faq" className="scroll-mt-20 py-16 lg:py-24">
-        <div className="container mx-auto max-w-3xl space-y-8">
+        <div className="container mx-auto max-w-3xl space-y-8" data-reveal>
           <div className="space-y-3 text-center">
             <Badge variant="secondary">FAQ</Badge>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -444,7 +452,10 @@ export const LandingPage = () => (
       {/* CTA */}
       <section className="pb-16 lg:pb-24">
         <div className="container">
-          <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 via-accent/30 to-transparent px-6 py-12 text-center sm:px-12">
+          <div
+            className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 via-accent/30 to-transparent px-6 py-12 text-center sm:px-12"
+            data-reveal
+          >
             <div className="mx-auto max-w-2xl space-y-5">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
                 Siap memodernisasi pengelolaan RT Anda?
@@ -470,5 +481,7 @@ export const LandingPage = () => (
     </main>
 
     <PublicSiteFooter />
+
+    <ScrollReveal />
   </div>
 );
