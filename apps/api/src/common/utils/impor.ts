@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { ZodError } from "zod";
 
 export const ringkasZodError = (error: ZodError): string =>
