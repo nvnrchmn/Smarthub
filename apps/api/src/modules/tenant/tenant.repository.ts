@@ -20,6 +20,18 @@ export const tenantRepository = {
 
   create: (data: Prisma.TenantUncheckedCreateInput) => prisma.tenant.create({ data }),
 
+  updateProfil: (id_tenant: number, data: Prisma.TenantUpdateInput) =>
+    prisma.tenant.update({ where: { id_tenant }, data, include: tenantInclude }),
+
+  pengaturanFind: (id_tenant: number) =>
+    prisma.pengaturanTenant.findUnique({ where: { id_tenant } }),
+
+  pengaturanUpsert: (
+    id_tenant: number,
+    update: Prisma.PengaturanTenantUncheckedUpdateInput,
+    create: Prisma.PengaturanTenantUncheckedCreateInput,
+  ) => prisma.pengaturanTenant.upsert({ where: { id_tenant }, update, create }),
+
   list: async ({ skip, take, where, orderBy }: ListParams) => {
     const [items, total] = await prisma.$transaction([
       prisma.tenant.findMany({ where, skip, take, orderBy, include: tenantInclude }),

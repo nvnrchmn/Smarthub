@@ -39,4 +39,6 @@ export const queryKeys = {
   langgananInvoice: (params?: Record<string, unknown>) =>
     ["langganan", "invoice", params ?? {}] as const,
   langgananInvoiceDetail: (id: number) => ["langganan", "invoice", id] as const,
+  tenantProfil: ["tenant", "profil"] as const,
+  tenantPengaturan: ["tenant", "pengaturan"] as const,
 };

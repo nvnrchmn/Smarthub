@@ -26,6 +26,25 @@ tenantRouter.get(
   tenantController.list,
 );
 
+// Rute statis harus didaftarkan SEBELUM "/:id_tenant" agar tidak tertangkap param.
+const pengurusOperasional = requireRole("Ketua_RT", "Sekretaris", "Bendahara");
+
+tenantRouter.get("/profil", pengurusOperasional, tenantController.profil);
+tenantRouter.patch(
+  "/profil",
+  pembuatTenant,
+  validate({ body: tenantValidation.updateTenantProfilSchema }),
+  tenantController.updateProfil,
+);
+
+tenantRouter.get("/pengaturan", pengurusOperasional, tenantController.pengaturan);
+tenantRouter.patch(
+  "/pengaturan",
+  pengurusOperasional,
+  validate({ body: tenantValidation.updatePengaturanTenantSchema }),
+  tenantController.updatePengaturan,
+);
+
 tenantRouter.get(
   "/:id_tenant",
   pembuatTenant,

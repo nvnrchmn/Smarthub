@@ -571,6 +571,7 @@ model Tenant {
   laporan_produk   LaporanProduk[]
   notifikasi       Notifikasi[]
   langganan        LanggananTenant?
+  pengaturan       PengaturanTenant?
   invoice_langganan InvoiceLangganan[]
   akun_pembayaran  AkunPembayaranTenant?
   rekening_bank    RekeningBankTenant[]
@@ -580,6 +581,25 @@ model Tenant {
   audit_log        AuditLog[]
 
   @@index([status])
+}
+
+/// Pengaturan per-tenant (1–1 dengan Tenant). Kolom eksplisit untuk yang sering
+/// dipakai; kolom Json untuk konfigurasi yang jarang/bervariasi.
+model PengaturanTenant {
+  id_tenant                 Int      @id
+  tahun_buku_mulai          Int      @default(1)
+  zona_waktu                String   @default("Asia/Jakarta")
+  nominal_iuran_default     Decimal? @db.Decimal(12, 2)
+  jatuh_tempo_iuran_tanggal Int?
+  denda_persen              Decimal? @db.Decimal(5, 2)
+  prefix_nomor              String?
+  notifikasi                Json?
+  dokumen                   Json?
+  branding                  Json?
+  updated_by                Int?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  tenant                    Tenant   @relation(fields: [id_tenant], references: [id_tenant], onDelete: Cascade)
 }
 
 enum StatusLangganan {

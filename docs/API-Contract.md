@@ -1107,8 +1107,10 @@ Notifikasi dibuat dalam alur yang sama dengan pembuatan postingan. Menyunting po
 | # | Method | Path | Akses | UC | Deskripsi |
 |---|---|---|---|---|---|
 | 9.1 | POST | `/tenant` | `Ketua_RT`, `Sekretaris` | UC-24 | Buat tenant + akun Ketua pertama + langganan trial (**SUDAH ADA**; `POST /tenant/registrasi` publik dibatalkan) |
-| 9.2 | GET | `/tenant/profil` | Ketua_RT, Sekretaris | – | Profil tenant aktif |
-| 9.3 | PATCH | `/tenant/profil` | Ketua_RT | – | Ubah profil tenant |
+| 9.2 | GET | `/tenant/profil` | Ketua_RT, Sekretaris, Bendahara | – | Profil (identitas) tenant aktif — **SUDAH ADA** |
+| 9.3 | PATCH | `/tenant/profil` | Ketua_RT, Sekretaris | – | Ubah profil tenant (parsial) — **SUDAH ADA** |
+| 9.3a | GET | `/tenant/pengaturan` | Ketua_RT, Sekretaris, Bendahara | – | Pengaturan operasional tenant (default otomatis) — **SUDAH ADA** |
+| 9.3b | PATCH | `/tenant/pengaturan` | Ketua_RT, Sekretaris, Bendahara | – | Ubah pengaturan operasional tenant — **SUDAH ADA** |
 | 9.4 | GET/POST | `/kyc`, `/kyc/initiate`, `/kyc/dokumen`, `/kyc/submit` | Ketua_RT, Sekretaris, Bendahara | UC-25 | Verifikasi Identitas (mode verify-on-behalf) — **SUDAH ADA** |
 | 9.5 | GET | `/tenant/verifikasi` | Ketua_RT, Sekretaris | UC-25 | Status verifikasi tenant |
 | 9.6 | GET | `/tenant/anggota` | Ketua_RT, Sekretaris | – | Daftar anggota tenant |
@@ -1182,10 +1184,17 @@ Notifikasi dibuat dalam alur yang sama dengan pembuatan postingan. Menyunting po
 
 - Gagal (409 Conflict): slug sudah dipakai.
 
-### 9.2–9.3 Profil Tenant (TARGET)
+### 9.2–9.3 Profil & Pengaturan Tenant (SUDAH ADA)
 
-- `GET /api/v1/tenant/profil` — identitas tenant aktif (dari JWT).
-- `PATCH /api/v1/tenant/profil` — Ketua_RT, body parsial (`nama`, `kontak_email`, `kontak_hp`, alamat).
+- `GET /api/v1/tenant/profil` — identitas tenant aktif (dari JWT). RBAC: Ketua_RT, Sekretaris, Bendahara.
+- `PATCH /api/v1/tenant/profil` — Ketua_RT, Sekretaris; body parsial (`nama`, `provinsi`, `kabupaten`, `kecamatan`, `jumlah_rumah`, `kontak_email`, `kontak_hp`).
+- `GET /api/v1/tenant/pengaturan` — pengaturan operasional tenant; mengembalikan **default** bila baris belum ada (`tahun_buku_mulai: 1`, `zona_waktu: "Asia/Jakarta"`, `notifikasi.pengingat_iuran: true`, dst).
+- `PATCH /api/v1/tenant/pengaturan` — Ketua_RT/Sekretaris/Bendahara; body parsial:
+  - Eksplisit: `tahun_buku_mulai` (1–12), `zona_waktu`, `nominal_iuran_default`, `jatuh_tempo_iuran_tanggal` (1–28), `denda_persen` (0–100), `prefix_nomor`.
+  - Json (digabung, bukan ditimpa): `notifikasi` (`pengingat_iuran`, `jam_kirim` HH:MM, `kanal_default`), `dokumen` (`nama_ttd`, `jabatan_ttd`, `kop`, `footer`), `branding` (`logo_url`, `warna_aksen` heks).
+  - Field angka kosong dinormalkan ke `null` (bukan `0`).
+- Tabel `PengaturanTenant` (1–1 dengan `Tenant`, `id_tenant` sebagai PK) ber-scope tenant (`TENANT_SCOPED_MODELS`).
+- UI: `/pengaturan/tenant` (**SUDAH ADA**) — identitas, operasional & keuangan, notifikasi, dokumen & branding. Penulisan identitas hanya Ketua/Sekretaris.
 
 ### 9.4 Verifikasi Identitas (SUDAH ADA — mode verify-on-behalf)
 

@@ -38,6 +38,7 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   "InvoiceLangganan",
   "AkunPembayaranTenant",
   "RekeningBankTenant",
+  "PengaturanTenant",
   "KycSubmission",
   "PembayaranIuran",
   "PencairanTenant",
