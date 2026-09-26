@@ -42,6 +42,7 @@ afterAll(async () => {
   await prisma.invoiceLangganan.deleteMany({ where: { id_tenant } });
   await prisma.langgananTenant.deleteMany({ where: { id_tenant } });
   await prisma.paketLangganan.deleteMany({ where: { kode: kodePaket } });
+  await prisma.paketLangganan.deleteMany({ where: { kode: "free" } });
   await prisma.tenant.deleteMany({ where: { slug } });
   await prisma.$disconnect();
 });
@@ -106,3 +107,74 @@ describe("Modul langganan (billing manual)", () => {
   });
 });
 
+describe("Paket Gratis (free)", () => {
+  it("mengaktifkan paket gratis tanpa membuat invoice", async () => {
+    await prisma.paketLangganan.upsert({
+      where: { kode: "free" },
+      update: { aktif: true },
+      create: {
+        kode: "free",
+        nama: "Gratis",
+        harga_bulanan: 0,
+        harga_tahunan: 0,
+        batas_rumah: 25,
+        fitur: ["Kependudukan dasar"],
+      },
+    });
+
+    const invoiceSebelum = await prisma.invoiceLangganan.count({ where: { id_tenant } });
+    const hasil = await runWithTenant({ id_tenant }, async () =>
+      langgananService.aktifkanGratis(id_tenant),
+    );
+
+    expect(hasil.kode_paket).toBe("free");
+    expect(hasil.status).toBe("Aktif");
+
+    const langganan = await prisma.langgananTenant.findUniqueOrThrow({ where: { id_tenant } });
+    expect(langganan.kode_paket).toBe("free");
+    expect(langganan.status).toBe("Aktif");
+
+    const invoiceSesudah = await prisma.invoiceLangganan.count({ where: { id_tenant } });
+    expect(invoiceSesudah).toBe(invoiceSebelum);
+  });
+
+  it("menurunkan langganan kedaluwarsa ke paket Gratis saat status dibaca", async () => {
+    const kedaluwarsa = new Date(Date.now() - 86_400_000);
+    await prisma.langgananTenant.update({
+      where: { id_tenant },
+      data: {
+        kode_paket: kodePaket,
+        status: "Trial",
+        trial_berakhir: kedaluwarsa,
+        berakhir: kedaluwarsa,
+      },
+    });
+
+    const status = await runWithTenant({ id_tenant }, async () =>
+      langgananService.status(id_tenant),
+    );
+    expect(status.kode_paket).toBe("free");
+    expect(status.status).toBe("Aktif");
+    expect(status.batas_rumah).toBe(25);
+  });
+
+  it("membatasi fitur Pro pada paket Gratis", async () => {
+    const marketplace = await runWithTenant({ id_tenant }, async () =>
+      langgananService.punyaFitur(id_tenant, "marketplace"),
+    );
+    expect(marketplace).toBe(false);
+
+    const ekspor = await runWithTenant({ id_tenant }, async () =>
+      langgananService.punyaFitur(id_tenant, "laporan_ekspor"),
+    );
+    expect(ekspor).toBe(false);
+  });
+
+  it("menegakkan kuota rumah paket Gratis", async () => {
+    await expect(
+      runWithTenant({ id_tenant }, async () =>
+        langgananService.pastikanKuotaCukup(id_tenant, 9999),
+      ),
+    ).rejects.toThrow(/kuota/i);
+  });
+});

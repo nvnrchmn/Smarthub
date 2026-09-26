@@ -4,6 +4,7 @@ import { env } from "../config/environment";
 import { kirimEmail } from "../config/kanal-notifikasi";
 import { logger } from "../config/logger";
 import { adminService } from "../modules/admin/admin.service";
+import { KODE_FREE } from "../modules/langganan/langganan.fitur";
 import { notifikasiService } from "../modules/notifikasi/notifikasi.service";
 
 const TENGGANG_HARI = 7;
@@ -48,7 +49,15 @@ const antrekanKeAkun = async (
   }[] = [];
 
   if (preferensi.email && akun.email) {
-    antrean.push({ id_tenant, id_penerima: akun.id_pengguna, kanal: "Email", tujuan: akun.email, tipe, judul, pesan });
+    antrean.push({
+      id_tenant,
+      id_penerima: akun.id_pengguna,
+      kanal: "Email",
+      tujuan: akun.email,
+      tipe,
+      judul,
+      pesan,
+    });
   }
   if (preferensi.whatsapp && akun.warga?.no_hp) {
     antrean.push({
@@ -66,7 +75,10 @@ const antrekanKeAkun = async (
   return antrean.length;
 };
 
-const apakahSudahDiantrekanHariIni = async (id_penerima: number, tipe: string): Promise<boolean> => {
+const apakahSudahDiantrekanHariIni = async (
+  id_penerima: number,
+  tipe: string,
+): Promise<boolean> => {
   const awalHari = tanggalHariIni();
   const jumlah = await prisma.notificationOutbox.count({
     where: { id_penerima, tipe, createdAt: { gte: awalHari } },
@@ -83,13 +95,58 @@ const jalankanDispatch = async (): Promise<void> => {
 
 export const jalankanLanggananTenggat = async (): Promise<void> => {
   const hariIni = tanggalHariIni();
-  const batasBerhenti = new Date(hariIni.getTime() - TENGGANG_HARI * 86_400_000);
+  const batasMenunggak = new Date(hariIni.getTime() - TENGGANG_HARI * 86_400_000);
+  const berlakuSampai = new Date(
+    Date.UTC(hariIni.getUTCFullYear() + 100, hariIni.getUTCMonth(), hariIni.getUTCDate()),
+  );
 
-  const akanMenunggak = await prisma.langgananTenant.findMany({
-    where: { status: { in: ["Trial", "Aktif"] }, berakhir: { lt: hariIni } },
+  const turunKeGratis = async (
+    id_langganan: number,
+    id_tenant: number,
+    tipe: string,
+    judul: string,
+    pesan: string,
+  ): Promise<void> => {
+    await prisma.langgananTenant.update({
+      where: { id_langganan },
+      data: {
+        kode_paket: KODE_FREE,
+        status: "Aktif",
+        trial_berakhir: null,
+        berakhir: berlakuSampai,
+      },
+    });
+
+    const pengurus = await prisma.akunPengguna.findMany({
+      where: { id_tenant, role: { in: [...PERAN_PENGURUS] }, status_akun: "Aktif" },
+      select: { id_pengguna: true, email: true, warga: { select: { no_hp: true } } },
+    });
+    for (const akun of pengurus) {
+      if (await apakahSudahDiantrekanHariIni(akun.id_pengguna, tipe)) continue;
+      await antrekanKeAkun(akun, id_tenant, tipe, judul, pesan);
+    }
+  };
+
+  // Trial berakhir → paket Gratis (akses tetap; data tidak dihapus).
+  const trialHabis = await prisma.langgananTenant.findMany({
+    where: { status: "Trial", berakhir: { lt: hariIni } },
     include: { tenant: { select: { id_tenant: true, nama: true } } },
   });
+  for (const langganan of trialHabis) {
+    await turunKeGratis(
+      langganan.id_langganan,
+      langganan.id_tenant,
+      "Langganan_Trial_Berakhir",
+      "Trial SmartHub berakhir",
+      `Masa trial Pro ${langganan.tenant.nama} berakhir. Akun otomatis beralih ke paket Gratis tanpa kehilangan data. Upgrade paket untuk fitur lanjutan.`,
+    );
+  }
 
+  // Langganan berbayar berakhir → Menunggak + pengingat.
+  const akanMenunggak = await prisma.langgananTenant.findMany({
+    where: { status: "Aktif", berakhir: { lt: hariIni }, kode_paket: { not: KODE_FREE } },
+    include: { tenant: { select: { id_tenant: true, nama: true } } },
+  });
   for (const langganan of akanMenunggak) {
     await prisma.langgananTenant.update({
       where: { id_langganan: langganan.id_langganan },
@@ -97,10 +154,13 @@ export const jalankanLanggananTenggat = async (): Promise<void> => {
     });
 
     const pengurus = await prisma.akunPengguna.findMany({
-      where: { id_tenant: langganan.id_tenant, role: { in: [...PERAN_PENGURUS] }, status_akun: "Aktif" },
+      where: {
+        id_tenant: langganan.id_tenant,
+        role: { in: [...PERAN_PENGURUS] },
+        status_akun: "Aktif",
+      },
       select: { id_pengguna: true, email: true, warga: { select: { no_hp: true } } },
     });
-
     for (const akun of pengurus) {
       if (await apakahSudahDiantrekanHariIni(akun.id_pengguna, "Langganan_Menunggak")) continue;
       await antrekanKeAkun(
@@ -113,20 +173,28 @@ export const jalankanLanggananTenggat = async (): Promise<void> => {
     }
   }
 
-  const akanBerhenti = await prisma.langgananTenant.findMany({
-    where: { status: "Menunggak", berakhir: { lt: batasBerhenti } },
+  // Lewat masa tenggang → paket Gratis (bukan mematikan akses).
+  const lewatTenggang = await prisma.langgananTenant.findMany({
+    where: { status: "Menunggak", berakhir: { lt: batasMenunggak } },
+    include: { tenant: { select: { id_tenant: true, nama: true } } },
   });
-
-  for (const langganan of akanBerhenti) {
-    await prisma.langgananTenant.update({
-      where: { id_langganan: langganan.id_langganan },
-      data: { status: "Berhenti" },
-    });
+  for (const langganan of lewatTenggang) {
+    await turunKeGratis(
+      langganan.id_langganan,
+      langganan.id_tenant,
+      "Langganan_Turun_Gratis",
+      "Langganan beralih ke paket Gratis",
+      `Langganan ${langganan.tenant.nama} melewati masa tenggang. Akun beralih ke paket Gratis; data tetap tersimpan.`,
+    );
   }
 
-  if (akanMenunggak.length > 0 || akanBerhenti.length > 0) {
+  if (trialHabis.length > 0 || akanMenunggak.length > 0 || lewatTenggang.length > 0) {
     logger.info(
-      { menunggak: akanMenunggak.length, berhenti: akanBerhenti.length },
+      {
+        trial_habis: trialHabis.length,
+        menunggak: akanMenunggak.length,
+        turun_gratis: lewatTenggang.length,
+      },
       "Status langganan diperbarui",
     );
   }
@@ -143,7 +211,14 @@ const jalankanPengingatIuran = async (): Promise<void> => {
 
   const iuran = await prisma.iuranRumah.findMany({
     where: { bulan, tahun, status_bayar: "Belum_Bayar" },
-    select: { id_iuran: true, id_tenant: true, id_rumah: true, jumlah_tagihan: true, bulan: true, tahun: true },
+    select: {
+      id_iuran: true,
+      id_tenant: true,
+      id_rumah: true,
+      jumlah_tagihan: true,
+      bulan: true,
+      tahun: true,
+    },
   });
 
   let terkirim = 0;
@@ -246,7 +321,9 @@ export const startWorkers = (): void => {
 
   timers.push(setInterval(() => void aman("dispatch", jalankanDispatch), env.WORKER_INTERVAL_MS));
   timers.push(setInterval(() => void aman("harian", jalankanHarian), 60 * 60 * 1000));
-  timers.push(setInterval(() => void aman("token-cleanup", jalankanTokenCleanup), 6 * 60 * 60 * 1000));
+  timers.push(
+    setInterval(() => void aman("token-cleanup", jalankanTokenCleanup), 6 * 60 * 60 * 1000),
+  );
 
   void aman("dispatch", jalankanDispatch);
   void aman("harian", jalankanHarian);

@@ -1270,11 +1270,16 @@ Status yang mungkin: `Menunggu_Verifikasi`, `Terverifikasi`, `Aktif`, `Ditangguh
 
 | Kode | Nama | Batas rumah | Harga bulanan | Harga tahunan |
 |---|---|---|---|---|
+| `free` | Gratis | 25 | Rp0 | Rp0 |
 | `basic` | Basic | 100 | Rp75.000 | Rp750.000 |
 | `pro` | Pro | 300 | Rp150.000 | Rp1.500.000 |
 | `enterprise` | Enterprise | Tanpa batas | Rp400.000 | Rp4.000.000 |
 
 Semua paket mendapat **trial 30 hari berfitur Pro**. Pembayaran tahunan = 10 × harga bulanan (diskon 2 bulan).
+
+> **Paket Gratis (2026-09-26).** Trial yang berakhir (dan langganan menunggak yang melewati masa tenggang 7 hari) otomatis **turun ke paket `free`** — bukan dimatikan; data tenant tidak dihapus. `POST /langganan/invoice` dengan paket gratis **mengaktifkan langsung tanpa invoice** (tidak memanggil Hub). `GET /langganan/status` menyertakan `fitur` (feature keys) untuk gating.
+>
+> **Gating fitur (server).** `free`/`basic`: kependudukan, keamanan, keuangan, diskusi. `pro` menambah `marketplace`, `notifikasi_wa`, `laporan_ekspor`; `enterprise` menambah `multi_blok`, `sla`, `onboarding`. Endpoint ter-gate mengembalikan `403` bila paket tidak mencakup fitur (mis. `/ekspor/*`, `/marketplace/*`).
 
 > **Kanal pembayaran langganan (2.1).** Pembayaran paket pada `9.22` diproses melalui **Logikraf Payment Hub**, bukan Xendit langsung. SmartHub membuat instruksi pembayaran di Hub (QRIS atau Virtual Account) dan baru menandai invoice lunas setelah menerima webhook Hub (`10.15`) dengan `event_id` unik.
 

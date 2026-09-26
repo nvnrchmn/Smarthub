@@ -46,6 +46,14 @@ export const langgananController = {
   buatInvoice: asyncHandler(async (req: Request, res: Response) => {
     const { id_tenant } = konteksTenant(req);
     const body = req.validated?.body as UbahPaketInput;
+
+    const paket = await langgananService.paketByKode(body.kode_paket);
+    if (paket?.gratis) {
+      const data = await langgananService.aktifkanGratis(id_tenant, body.kode_paket);
+      sendSuccess(res, "Paket Gratis diaktifkan", data, undefined, 201);
+      return;
+    }
+
     const data = await langgananService.buatInvoice(id_tenant, body);
     sendSuccess(res, "Invoice langganan dibuat", data, undefined, 201);
   }),

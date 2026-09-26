@@ -8,6 +8,7 @@ import type { PaketLangganan } from "@prisma/client";
 import { HttpError } from "../../common/utils/http-error";
 import { buildMeta, resolveOrderBy, resolvePagination } from "../../common/utils/pagination";
 import { parseDateOnly, toDateOnly, toIso, toMoney } from "../../common/utils/serialize";
+import { KODE_FREE, paketPunyaFitur } from "./langganan.fitur";
 import {
   type InvoiceLanggananWithRelations,
   type LanggananWithPaket,
@@ -79,9 +80,48 @@ const presentStatus = (langganan: LanggananWithPaket, jumlah_rumah: number) => {
     trial_berakhir: toDateOnly(langganan.trial_berakhir),
     hari_tersisa,
     batas_rumah: langganan.paket.batas_rumah,
+    fitur: langganan.paket.fitur,
     rumah_terpakai: jumlah_rumah,
     kuota_terlampaui,
   };
+};
+
+/**
+ * Menegakkan akhir masa berlaku: trial/belian yang habis otomatis turun ke
+ * paket **Gratis** (`free`) alih-alih mematikan akses. Data tenant tidak dihapus.
+ */
+const pastikanStatusBerlaku = async (
+  langganan: LanggananWithPaket,
+): Promise<LanggananWithPaket> => {
+  if (langganan.kode_paket === KODE_FREE) return langganan;
+
+  const hariIni = startOfToday();
+  const berakhir = langganan.berakhir.getTime() < hariIni.getTime();
+  const trialHabis =
+    langganan.status === "Trial" &&
+    langganan.trial_berakhir !== null &&
+    langganan.trial_berakhir.getTime() < hariIni.getTime();
+
+  if (!berakhir && !trialHabis) return langganan;
+
+  const berlakuSampai = addYears(hariIni, 100);
+  return langgananRepository.upsertLangganan(
+    langganan.id_tenant,
+    {
+      kode_paket: KODE_FREE,
+      status: "Aktif",
+      trial_berakhir: null,
+      mulai: hariIni,
+      berakhir: berlakuSampai,
+    },
+    {
+      id_tenant: langganan.id_tenant,
+      kode_paket: KODE_FREE,
+      status: "Aktif",
+      mulai: hariIni,
+      berakhir: berlakuSampai,
+    },
+  );
 };
 
 const ambilLangganan = async (id_tenant: number): Promise<LanggananWithPaket> => {
@@ -118,10 +158,18 @@ export const langgananService = {
     ]);
 
     if (!langganan) {
-      return { batas_rumah: null, rumah_terpakai: terpakai, sisa: null };
+      // Tanpa langganan = perlakukan seperti paket Gratis (bukan tanpa batas).
+      const free = await langgananRepository.paketByKode(KODE_FREE);
+      const batas = free?.batas_rumah ?? null;
+      return {
+        batas_rumah: batas,
+        rumah_terpakai: terpakai,
+        sisa: batas === null ? null : Math.max(0, batas - terpakai),
+      };
     }
 
-    const batas = langganan.paket.batas_rumah;
+    const berlaku = await pastikanStatusBerlaku(langganan);
+    const batas = berlaku.paket.batas_rumah;
     return {
       batas_rumah: batas,
       rumah_terpakai: terpakai,
@@ -151,12 +199,74 @@ export const langgananService = {
     return items.map(presentPaket);
   },
 
+  /** Detail satu paket + penanda gratis (dipakai controller/UI). */
+  async paketByKode(kode: string) {
+    const paket = await langgananRepository.paketByKode(kode);
+    if (!paket) return null;
+    return {
+      ...presentPaket(paket),
+      gratis: Number(paket.harga_bulanan) === 0 && Number(paket.harga_tahunan) === 0,
+    };
+  },
+
+  /** Aktifkan paket Gratis langsung — tanpa invoice dan tanpa panggilan Hub. */
+  async aktifkanGratis(id_tenant: number, kodePaket = KODE_FREE) {
+    const paket = await langgananRepository.paketByKode(kodePaket);
+    if (!paket || !paket.aktif) {
+      throw HttpError.unprocessable("Validasi gagal", [
+        { field: "kode_paket", message: "Paket langganan tidak ditemukan atau tidak aktif" },
+      ]);
+    }
+    if (Number(paket.harga_bulanan) !== 0 || Number(paket.harga_tahunan) !== 0) {
+      throw HttpError.unprocessable("Validasi gagal", [
+        { field: "kode_paket", message: "Paket ini berbayar; gunakan alur invoice." },
+      ]);
+    }
+
+    const mulai = startOfToday();
+    const berlakuSampai = addYears(mulai, 100);
+    const aktif = await langgananRepository.upsertLangganan(
+      id_tenant,
+      {
+        kode_paket: paket.kode,
+        status: "Aktif",
+        trial_berakhir: null,
+        mulai,
+        berakhir: berlakuSampai,
+      },
+      {
+        id_tenant,
+        kode_paket: paket.kode,
+        status: "Aktif",
+        mulai,
+        berakhir: berlakuSampai,
+      },
+    );
+
+    return {
+      diaktifkan_langsung: true,
+      kode_paket: aktif.kode_paket,
+      nama_paket: aktif.paket.nama,
+      status: aktif.status,
+      mulai: toDateOnly(aktif.mulai),
+      berakhir: toDateOnly(aktif.berakhir),
+    };
+  },
+
   async status(id_tenant: number) {
     const [langganan, jumlah_rumah] = await Promise.all([
       ambilLangganan(id_tenant),
       langgananRepository.countRumah(),
     ]);
-    return presentStatus(langganan, jumlah_rumah);
+    return presentStatus(await pastikanStatusBerlaku(langganan), jumlah_rumah);
+  },
+
+  /** Apakah paket tenant saat ini mencakup fitur tertentu (feature key). */
+  async punyaFitur(id_tenant: number, fitur: string): Promise<boolean> {
+    const langganan = await langgananRepository.langgananByTenant(id_tenant);
+    if (!langganan) return paketPunyaFitur(KODE_FREE, fitur);
+    const berlaku = await pastikanStatusBerlaku(langganan);
+    return paketPunyaFitur(berlaku.kode_paket, fitur);
   },
 
   async listInvoice(query: ListInvoiceQueryInput) {
@@ -200,9 +310,7 @@ export const langgananService = {
       input.periode === "tahunan" ? Number(paket.harga_tahunan) : Number(paket.harga_bulanan);
 
     const kredit_prorata =
-      input.periode === "bulanan"
-        ? hitungKreditProrata(langganan, langganan.paket, paket.kode)
-        : 0;
+      input.periode === "bulanan" ? hitungKreditProrata(langganan, langganan.paket, paket.kode) : 0;
     const jumlah = Math.max(0, Math.round((harga - kredit_prorata) * 100) / 100);
 
     const invoice = await langgananRepository.invoiceCreate({

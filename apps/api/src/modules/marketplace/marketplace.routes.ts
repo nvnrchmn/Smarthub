@@ -3,12 +3,14 @@ import { authenticate } from "../../common/middlewares/auth.middleware";
 import { requireRole } from "../../common/middlewares/rbac.middleware";
 import { validate } from "../../common/middlewares/validate.middleware";
 import { requireTenant } from "../../common/middlewares/tenant.middleware";
+import { requireFitur } from "../langganan/langganan.middleware";
 import { marketplaceController } from "./marketplace.controller";
 import { marketplaceValidation } from "./marketplace.validation";
 
 export const marketplaceRouter = Router();
 
-marketplaceRouter.use(authenticate, requireTenant);
+// Marketplace tersedia mulai paket Pro.
+marketplaceRouter.use(authenticate, requireTenant, requireFitur("marketplace"));
 
 marketplaceRouter.get("/kategori", marketplaceController.listKategori);
 
