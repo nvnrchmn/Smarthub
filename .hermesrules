@@ -13,8 +13,29 @@ Login     : tenant   POST /api/v1/auth/login       {identifier, password}
 PENTING   : API dijalankan LANGSUNG dari repo (ExecStart apps/api/dist/server.js), bukan dari copy.
             Menyalin node_modules ke webroot GAGAL — Prisma client hidup di pnpm store,
             error: Named export 'Prisma' not found (bundle ESM impor modul CJS).
+CACHE     : /www/server/nginx/conf/proxy.conf (global, blok http) mengaktifkan `proxy_cache cache_one`
+            -> HTML upstream dicache per-path (inactive=1d). Vhost INI sudah `proxy_cache off;`
+            JANGAN dihapus: tanpa itu rilis = HTML basi + chunk 404 + halaman blank.
+            Bersihkan cache: sudo find /www/server/nginx/proxy_cache_dir -mindepth 1 -delete
+                             sudo nginx -t && sudo systemctl reload nginx
 
 --- ARSIP ---
+
+## 2026-09-26 — "Dashboard blank" = nginx proxy_cache global (BUKAN bug build)
+Status: SELESAI. Repo sudah paling baru (7dc134e, tidak ada commit baru di remote); build+rilis ulang OK.
+Gejala: /dashboard via HTTPS -> 200 + chunk LAMA page-618f71a3630eeba6.js yang SUDAH TIDAK ADA di
+        disk -> 404 -> blank. Tapi http://127.0.0.1:3000/dashboard -> 307 (benar). Query-buster -> 307.
+Akar  : `proxy_cache cache_one;` di /www/server/nginx/conf/proxy.conf (global, blok http) — vhost ini
+        dulu tidak menonaktifkannya. Next.js mengirim `cache-control: s-maxage=31536000` pada
+        /dashboard (halaman ber-auth yang ikut di-prerender) -> nginx menyimpan HTML itu 1 hari.
+        Jadi prerender/.next di disk selalu segar, tapi yang Dilayani nginx salinan lama.
+Fix   : proxy_cache off; + proxy_no_cache 1; + proxy_cache_bypass 1; di blok server 443 vhost
+        (backup: smarthub.logikraf.id.conf.bak-proxycache-20260926) -> nginx -t lolos -> reload
+        -> 186 entri /www/server/nginx/proxy_cache_dir dihapus.
+Bukti : /login 200; 8/8 chunk yang direferensikan 200 (tidak ada 404); /dashboard 307 ->
+        /login?redirect=%2Fdashboard dan tetap 307 di percobaan ke-2 (cache tidak kembali).
+Sisa  : 9 vhost lain MASIH cache aktif — client, export, go_livinemanajemen, go_logikraf.id, gowa,
+        mysticglide, novanurachman, partners, srv.logikraf.id (panel). Tawarkan ke pemilik.
 
 ## 2026-09-25 — SmartHub baru go-live
 Status: SELESAI. Situs live dan bisa login.
