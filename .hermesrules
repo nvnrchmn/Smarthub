@@ -11,6 +11,11 @@ Deploy    : build-lokal.sh smarthub [build|rilis] — config /etc/build-lokal.d/
 Webroot   : /www/wwwroot/smarthub.logikraf.id/web = .next/standalone + .next/static + public
 Env       : /www/wwwroot/smarthub.logikraf.id/.env (EnvironmentFile kedua unit)
 Vhost     : /www/server/panel/vhost/nginx/smarthub.logikraf.id.conf (80->301 ; 443 ; /api/ -> 4000)
+            WAJIB ada location -> :3000 untuk SEMUA prefix yang hanya dimiliki Next.js:
+            /api/auth/ · /api/bff/ · /api/platform/ · /api/platform-bff/ · /api/platform/auth/
+            Express TIDAK punya rute ber-prefix /api/platform/ sama sekali. Kalau satu lupa,
+            permintaan jatuh ke location /api/ (:4000) dan dijawab 404
+            "Endpoint <METHOD> <path> tidak ditemukan" padahal halaman & build normal.
 Login     : tenant   POST /api/v1/auth/login       {identifier, password}
             platform POST /api/v1/admin/auth/login {email, password}
 PENTING   : API dijalankan LANGSUNG dari repo (ExecStart apps/api/dist/server.js), bukan dari copy.
