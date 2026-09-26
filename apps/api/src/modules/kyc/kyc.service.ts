@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { KycInitiateInput, KycSubmitInput } from "@smarthub/shared";
 import {
   bacaKanal,
