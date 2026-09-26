@@ -125,6 +125,12 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["Ketua_RT", "Sekretaris", "Bendahara"],
   },
   {
+    label: "Pengaturan RT",
+    href: "/pengaturan/tenant",
+    icon: Building2,
+    roles: ["Ketua_RT", "Sekretaris", "Bendahara"],
+  },
+  {
     label: "Preferensi Notifikasi",
     href: "/pengaturan/notifikasi",
     icon: BellRing,
