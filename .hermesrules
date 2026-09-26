@@ -21,6 +21,37 @@ CACHE     : /www/server/nginx/conf/proxy.conf (global, blok http) mengaktifkan `
 
 --- ARSIP ---
 
+## 2026-09-26 — Opsi 2 & 3: kredensial Hub diselaraskan + halaman ber-auth tak lagi di-prerender
+Status: SELESAI & TERVERIFIKASI.
+
+OPSI 2 — integrasi Hub (temuan: bukan cuma key kosong)
+- `LOGIKRAF_HUB_API_KEY` memang KOSONG tapi TIDAK perlu diisi: `config/hub.ts` memakai
+  `LOGIKRAF_INTERNAL_API_KEY || LOGIKRAF_HUB_API_KEY` — INTERNAL yang utama, HUB cuma fallback.
+- BUG: `LOGIKRAF_INTERNAL_API_KEY` di .env = punya MYSTIC GLIDE (sha256 b2405e14…), sedangkan
+  client_stores 'Smarthub' = 4c649d8d…. Hub memvalidasi PER STORE (`storeByInternalKey`,
+  platform_fee.go) → Smarthub tampil sebagai Mystic Glide ke Hub. Diselaraskan dari DB.
+- BUG: `LOGIKRAF_HUB_WEBHOOK_SECRET` (1fefb26d…) ≠ client_stores.webhook_secret (d4a45bc1…)
+  → webhook Hub→Smarthub gagal verifikasi. Diselaraskan.
+- Keras: izin .env 644 → 600 (isinya DATABASE_URL, JWT_SECRET, key Hub).
+- Bukti: sha256 PENUH kedua kredensial identik dgn DB Hub; `GET /api/client-store/agreement`
+  dgn key baru → 200; API /health 200 pasca-restart; backup `.env.bak-hubkeys-20260926`.
+- Belum diuji: webhook masuk end-to-end (butuh event nyata). Header Hub: `X-Logikraf-Signature`
+  (secret mentah) + `X-Logikraf-Signature-Hmac` = HMAC-SHA256(body, secret).
+
+OPSI 3 — halaman ber-auth tidak lagi di-prerender (commit 43cd333)
+- Sebab: `(app)/layout.tsx` & `platform/layout.tsx` `"use client"`, dan route segment config
+  TIDAK berlaku di Client Component (diuji: force-dynamic di page client tak berefek — 39 rute tetap).
+- Solusi: layout dipecah jadi Server Component tipis ber-`export const dynamic = "force-dynamic"`
+  yang merender shell klien: `(app)/app-layout-client.tsx`, `platform/platform-layout-client.tsx`.
+- Bukti: prerender 39 → 6 rute (sisa publik: /login /403 /_not-found /reset-password
+  /robots.txt /sitemap.xml); 5 rute ber-auth → 307 TANPA `s-maxage`; /login 200; API 200.
+- Efek: HTML ber-auth tak bisa dibasi cache bersama, dan tak ada lagi HTML ber-auth yang
+  bisa dibagi antar-pengguna.
+
+CATATAN: Cloudflare proxy aktif utk client, export, mysticglide, gowa (`cf-cache-status: DYNAMIC`
+= CF tidak meng-cache). Itu TIDAK mematikan `proxy_cache cache_one` di vhost tsb — cache nginx
+tetap aktif, jadi lubang HTML basi masih ada di sana.
+
 ## 2026-09-26 — "Dashboard blank" = nginx proxy_cache global (BUKAN bug build)
 Status: SELESAI. Repo sudah paling baru (7dc134e, tidak ada commit baru di remote); build+rilis ulang OK.
 Gejala: /dashboard via HTTPS -> 200 + chunk LAMA page-618f71a3630eeba6.js yang SUDAH TIDAK ADA di
