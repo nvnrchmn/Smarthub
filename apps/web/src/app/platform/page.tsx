@@ -41,7 +41,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Ringkasan {
@@ -103,6 +110,18 @@ interface AkunPlatformItem {
 
 interface AlertData {
   webhook_menunggu: WebhookItem[];
+  webhook_gagal: WebhookItem[];
+  webhook_gagal_jumlah: number;
+  payout_gagal: {
+    id_pencairan: number;
+    id_tenant: number;
+    tenant: string;
+    jumlah: string;
+    failure_code: string | null;
+    failure_reason: string | null;
+    diperbarui_pada: string | null;
+  }[];
+  payout_gagal_jumlah: number;
   langganan_jatuh_tempo: {
     id_tenant: number;
     tenant: { id_tenant: number; nama: string; slug: string };
@@ -136,6 +155,7 @@ export default function PlatformDashboardPage() {
 
   const [impersonateTenant, setImpersonateTenant] = useState<TenantItem | null>(null);
   const [alasan, setAlasan] = useState("");
+  const [impersonateKodeMfa, setImpersonateKodeMfa] = useState("");
 
   const [akunDialog, setAkunDialog] = useState(false);
   const [akunForm, setAkunForm] = useState({
@@ -167,28 +187,36 @@ export default function PlatformDashboardPage() {
 
   const langgananQuery = useQuery({
     queryKey: ["platform", "langganan"],
-    queryFn: async () => platformFetch<LanggananItem[]>(`/langganan${buildQuery({ page: 1, limit: 20 })}`),
+    queryFn: async () =>
+      platformFetch<LanggananItem[]>(`/langganan${buildQuery({ page: 1, limit: 20 })}`),
   });
 
   const webhookQuery = useQuery({
     queryKey: ["platform", "webhook"],
-    queryFn: async () => platformFetch<WebhookItem[]>(`/webhook-event${buildQuery({ page: 1, limit: 20 })}`),
+    queryFn: async () =>
+      platformFetch<WebhookItem[]>(`/webhook-event${buildQuery({ page: 1, limit: 20 })}`),
   });
 
   const auditQuery = useQuery({
     queryKey: ["platform", "audit"],
-    queryFn: async () => platformFetch<AuditItem[]>(`/audit-log${buildQuery({ page: 1, limit: 20 })}`),
-  });
-
-  const akunQuery = useQuery({
-    queryKey: ["platform", "akun"],
-    queryFn: async () => platformFetch<AkunPlatformItem[]>(`/akun${buildQuery({ page: 1, limit: 50 })}`),
+    queryFn: async () =>
+      platformFetch<AuditItem[]>(`/audit-log${buildQuery({ page: 1, limit: 20 })}`),
   });
 
   const meQuery = useQuery({
     queryKey: ["platform", "me"],
     queryFn: async () => (await platformFetch<PlatformMe>("/me")).data,
     retry: false,
+  });
+
+  const isSuperadmin = meQuery.data?.role === "Superadmin";
+
+  const akunQuery = useQuery({
+    queryKey: ["platform", "akun"],
+    queryFn: async () =>
+      platformFetch<AkunPlatformItem[]>(`/akun${buildQuery({ page: 1, limit: 50 })}`),
+    // Hanya Superadmin yang boleh membaca daftar akun platform.
+    enabled: isSuperadmin,
   });
 
   const alertQuery = useQuery({
@@ -207,7 +235,8 @@ export default function PlatformDashboardPage() {
       toast.success("Status tenant diperbarui");
       await invalidatePlatform();
     },
-    onError: (error) => toast.error(error instanceof ApiError ? error.message : "Gagal memperbarui"),
+    onError: (error) =>
+      toast.error(error instanceof ApiError ? error.message : "Gagal memperbarui"),
   });
 
   const impersonasi = useMutation({
@@ -215,7 +244,11 @@ export default function PlatformDashboardPage() {
       const response = await fetch("/api/platform/impersonate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id_tenant: impersonateTenant?.id_tenant, alasan }),
+        body: JSON.stringify({
+          id_tenant: impersonateTenant?.id_tenant,
+          alasan,
+          kode_mfa: impersonateKodeMfa,
+        }),
       });
       const payload = (await response.json().catch(() => null)) as { message?: string } | null;
       if (!response.ok) throw new Error(payload?.message ?? "Impersonasi gagal");
@@ -236,7 +269,8 @@ export default function PlatformDashboardPage() {
       setAkunForm({ nama: "", email: "", password: "", role: "Operator" });
       await invalidatePlatform();
     },
-    onError: (error) => toast.error(error instanceof ApiError ? error.message : "Gagal membuat akun"),
+    onError: (error) =>
+      toast.error(error instanceof ApiError ? error.message : "Gagal membuat akun"),
   });
 
   const ubahStatusAkun = useMutation({
@@ -246,13 +280,17 @@ export default function PlatformDashboardPage() {
       toast.success("Akun platform diperbarui");
       await invalidatePlatform();
     },
-    onError: (error) => toast.error(error instanceof ApiError ? error.message : "Gagal memperbarui akun"),
+    onError: (error) =>
+      toast.error(error instanceof ApiError ? error.message : "Gagal memperbarui akun"),
   });
 
   const setupMfa = useMutation({
     mutationFn: async () =>
-      (await platformFetch<{ secret: string; otpauth_url: string }>("/auth/mfa/setup", { method: "POST" }))
-        .data,
+      (
+        await platformFetch<{ secret: string; otpauth_url: string }>("/auth/mfa/setup", {
+          method: "POST",
+        })
+      ).data,
     onSuccess: (data) => {
       setMfaSecret(data.secret);
       setMfaOtpauth(data.otpauth_url);
@@ -262,7 +300,8 @@ export default function PlatformDashboardPage() {
   });
 
   const activateMfa = useMutation({
-    mutationFn: async () => platformFetch("/auth/mfa/activate", { method: "POST", body: { kode: mfaKode } }),
+    mutationFn: async () =>
+      platformFetch("/auth/mfa/activate", { method: "POST", body: { kode: mfaKode } }),
     onSuccess: async () => {
       toast.success("MFA diaktifkan");
       setMfaSecret(null);
@@ -274,7 +313,8 @@ export default function PlatformDashboardPage() {
   });
 
   const disableMfa = useMutation({
-    mutationFn: async () => platformFetch("/auth/mfa/disable", { method: "POST", body: { kode: mfaKode } }),
+    mutationFn: async () =>
+      platformFetch("/auth/mfa/disable", { method: "POST", body: { kode: mfaKode } }),
     onSuccess: async () => {
       toast.success("MFA dinonaktifkan");
       setMfaKode("");
@@ -287,6 +327,8 @@ export default function PlatformDashboardPage() {
   const alerts = alertQuery.data;
   const totalAlert = alerts
     ? alerts.webhook_menunggu.length +
+      alerts.webhook_gagal_jumlah +
+      alerts.payout_gagal_jumlah +
       alerts.langganan_jatuh_tempo.length +
       alerts.invoice_belum_bayar.length
     : 0;
@@ -302,7 +344,9 @@ export default function PlatformDashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Dasbor Platform</h1>
-        <p className="text-sm text-muted-foreground">Kelola tenant, langganan, webhook, dan akun platform.</p>
+        <p className="text-sm text-muted-foreground">
+          Kelola tenant, langganan, webhook, dan akun platform.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -311,7 +355,9 @@ export default function PlatformDashboardPage() {
             <CardTitle className="text-sm text-muted-foreground">Total Tenant</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
-            {ringkasan ? ringkasan.tenant_per_status.reduce((total, item) => total + item.jumlah, 0) : "-"}
+            {ringkasan
+              ? ringkasan.tenant_per_status.reduce((total, item) => total + item.jumlah, 0)
+              : "-"}
           </CardContent>
         </Card>
         <Card>
@@ -342,12 +388,14 @@ export default function PlatformDashboardPage() {
 
       <Tabs defaultValue="tenant">
         <TabsList>
-          <TabsTrigger value="alert">Perlu Tindakan{totalAlert > 0 ? ` (${totalAlert})` : ""}</TabsTrigger>
+          <TabsTrigger value="alert">
+            Perlu Tindakan{totalAlert > 0 ? ` (${totalAlert})` : ""}
+          </TabsTrigger>
           <TabsTrigger value="tenant">Tenant</TabsTrigger>
           <TabsTrigger value="langganan">Langganan</TabsTrigger>
           <TabsTrigger value="webhook">Webhook</TabsTrigger>
           <TabsTrigger value="audit">Audit</TabsTrigger>
-          <TabsTrigger value="akun">Akun Platform</TabsTrigger>
+          {isSuperadmin ? <TabsTrigger value="akun">Akun Platform</TabsTrigger> : null}
           <TabsTrigger value="keamanan">Keamanan</TabsTrigger>
         </TabsList>
 
@@ -362,12 +410,44 @@ export default function PlatformDashboardPage() {
             <div className="space-y-4">
               {alerts && alerts.webhook_menunggu.length > 0 ? (
                 <div className="rounded-lg border bg-card p-4">
-                  <h3 className="mb-2 font-semibold">Webhook belum diproses ({alerts.webhook_menunggu.length})</h3>
+                  <h3 className="mb-2 font-semibold">
+                    Webhook belum diproses ({alerts.webhook_menunggu.length})
+                  </h3>
                   <ul className="space-y-1 text-sm">
                     {alerts.webhook_menunggu.map((item) => (
                       <li key={item.id_event} className="font-mono text-xs">
                         {item.tipe} · {item.event_id}
                         {item.error ? ` · ${item.error}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {alerts && alerts.webhook_gagal.length > 0 ? (
+                <div className="rounded-lg border border-destructive/40 bg-card p-4">
+                  <h3 className="mb-2 font-semibold">
+                    Webhook gagal 24 jam ({alerts.webhook_gagal_jumlah})
+                  </h3>
+                  <ul className="space-y-1 text-sm">
+                    {alerts.webhook_gagal.map((item) => (
+                      <li key={item.id_event} className="font-mono text-xs">
+                        {item.tipe} · {item.event_id}
+                        {item.error ? ` · ${item.error}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {alerts && alerts.payout_gagal.length > 0 ? (
+                <div className="rounded-lg border border-destructive/40 bg-card p-4">
+                  <h3 className="mb-2 font-semibold">
+                    Payout gagal 24 jam ({alerts.payout_gagal_jumlah})
+                  </h3>
+                  <ul className="space-y-1 text-sm">
+                    {alerts.payout_gagal.map((item) => (
+                      <li key={item.id_pencairan}>
+                        {item.tenant} · {formatRupiah(item.jumlah)}
+                        {item.failure_code ? ` · ${item.failure_code}` : ""}
                       </li>
                     ))}
                   </ul>
@@ -395,7 +475,8 @@ export default function PlatformDashboardPage() {
                   <ul className="space-y-1 text-sm">
                     {alerts.invoice_belum_bayar.map((item) => (
                       <li key={item.id_invoice}>
-                        {item.tenant.nama} · {item.nama_paket} · {formatRupiah(item.jumlah)} · {item.status}
+                        {item.tenant.nama} · {item.nama_paket} · {formatRupiah(item.jumlah)} ·{" "}
+                        {item.status}
                       </li>
                     ))}
                   </ul>
@@ -413,7 +494,11 @@ export default function PlatformDashboardPage() {
             </p>
 
             {!mfaAktif && !mfaSecret ? (
-              <Button className="mt-3" disabled={setupMfa.isPending} onClick={() => setupMfa.mutate()}>
+              <Button
+                className="mt-3"
+                disabled={setupMfa.isPending}
+                onClick={() => setupMfa.mutate()}
+              >
                 {setupMfa.isPending ? "Menyiapkan..." : "Aktifkan MFA"}
               </Button>
             ) : null}
@@ -422,7 +507,9 @@ export default function PlatformDashboardPage() {
               <div className="mt-3 space-y-3">
                 <div className="space-y-1">
                   <Label>Secret</Label>
-                  <pre className="overflow-auto rounded-md border bg-muted p-3 text-xs">{mfaSecret}</pre>
+                  <pre className="overflow-auto rounded-md border bg-muted p-3 text-xs">
+                    {mfaSecret}
+                  </pre>
                   {mfaOtpauth ? (
                     <p className="break-all text-xs text-muted-foreground">{mfaOtpauth}</p>
                   ) : null}
@@ -530,35 +617,49 @@ export default function PlatformDashboardPage() {
                       <TableCell>{tenant.rumah_terpakai}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {tenant.status === "Aktif" ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={ubahStatus.isPending}
-                              onClick={() => ubahStatus.mutate({ id: tenant.id_tenant, status: "Ditangguhkan" })}
-                            >
-                              Tangguhkan
-                            </Button>
+                          {!isSuperadmin ? (
+                            <span className="text-xs text-muted-foreground">Hanya baca</span>
                           ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={ubahStatus.isPending}
-                              onClick={() => ubahStatus.mutate({ id: tenant.id_tenant, status: "Aktif" })}
-                            >
-                              Aktifkan
-                            </Button>
+                            <>
+                              {tenant.status === "Aktif" ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={ubahStatus.isPending}
+                                  onClick={() =>
+                                    ubahStatus.mutate({
+                                      id: tenant.id_tenant,
+                                      status: "Ditangguhkan",
+                                    })
+                                  }
+                                >
+                                  Tangguhkan
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={ubahStatus.isPending}
+                                  onClick={() =>
+                                    ubahStatus.mutate({ id: tenant.id_tenant, status: "Aktif" })
+                                  }
+                                >
+                                  Aktifkan
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setImpersonateTenant(tenant);
+                                  setAlasan("");
+                                  setImpersonateKodeMfa("");
+                                }}
+                              >
+                                <KeyRound className="h-4 w-4" /> Impersonasi
+                              </Button>
+                            </>
                           )}
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                              setImpersonateTenant(tenant);
-                              setAlasan("");
-                            }}
-                          >
-                            <KeyRound className="h-4 w-4" /> Impersonasi
-                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -711,9 +812,7 @@ export default function PlatformDashboardPage() {
                     <TableRow key={item.id_akun_platform}>
                       <TableCell className="font-medium">{item.nama}</TableCell>
                       <TableCell>{item.email}</TableCell>
-                      <TableCell>
-                        {PLATFORM_ROLE_LABELS[item.role] ?? item.role}
-                      </TableCell>
+                      <TableCell>{PLATFORM_ROLE_LABELS[item.role] ?? item.role}</TableCell>
                       <TableCell>
                         <Badge variant={item.status_akun === "Aktif" ? "success" : "secondary"}>
                           {item.status_akun}
@@ -743,13 +842,16 @@ export default function PlatformDashboardPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={impersonateTenant !== null} onOpenChange={(open) => !open && setImpersonateTenant(null)}>
+      <Dialog
+        open={impersonateTenant !== null}
+        onOpenChange={(open) => !open && setImpersonateTenant(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Masuk sebagai {impersonateTenant?.nama}</DialogTitle>
             <DialogDescription>
-              Sesi berjalan sebagai Ketua_RT tenant ini, berlaku 60 menit, <strong>hanya baca</strong>, dan tercatat di
-              audit log.
+              Sesi berjalan sebagai Ketua_RT tenant ini, berlaku 60 menit,{" "}
+              <strong>hanya baca</strong>, dan tercatat di audit log.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -761,9 +863,27 @@ export default function PlatformDashboardPage() {
               placeholder="mis. menindaklanjuti tiket dukungan"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="impersonate-mfa">Kode MFA</Label>
+            <Input
+              id="impersonate-mfa"
+              inputMode="numeric"
+              maxLength={6}
+              value={impersonateKodeMfa}
+              onChange={(event) => setImpersonateKodeMfa(event.target.value)}
+              placeholder="6 digit dari aplikasi authenticator"
+            />
+            <p className="text-xs text-muted-foreground">
+              MFA wajib aktif untuk impersonasi (step-up).
+            </p>
+          </div>
           <DialogFooter>
             <Button
-              disabled={alasan.trim().length < 5 || impersonasi.isPending}
+              disabled={
+                alasan.trim().length < 5 ||
+                !/^\d{6}$/.test(impersonateKodeMfa) ||
+                impersonasi.isPending
+              }
               onClick={() => impersonasi.mutate()}
             >
               {impersonasi.isPending ? "Memproses..." : "Masuk sebagai (read-only)"}

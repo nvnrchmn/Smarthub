@@ -20,7 +20,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface PaketItem {
   kode: string;
@@ -50,6 +57,14 @@ export default function PlatformPaketPage() {
     batas_rumah: "",
     aktif: true,
   });
+
+  const meQuery = useQuery({
+    queryKey: ["platform", "me"],
+    queryFn: async () => (await platformFetch<{ role: string }>("/me")).data,
+    retry: false,
+  });
+  const isSuperadmin = meQuery.data?.role === "Superadmin";
+  const paketGratis = editing?.kode === "free";
 
   const paketQuery = useQuery({
     queryKey: ["platform", "paket"],
@@ -87,7 +102,8 @@ export default function PlatformPaketPage() {
       setEditing(null);
       await queryClient.invalidateQueries({ queryKey: ["platform", "paket"] });
     },
-    onError: (error) => toast.error(error instanceof ApiError ? error.message : "Gagal memperbarui paket"),
+    onError: (error) =>
+      toast.error(error instanceof ApiError ? error.message : "Gagal memperbarui paket"),
   });
 
   const paket = paketQuery.data ?? [];
@@ -131,9 +147,13 @@ export default function PlatformPaketPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="outline" size="sm" onClick={() => setEditing(item)}>
-                      <Pencil className="h-4 w-4" /> Edit
-                    </Button>
+                    {isSuperadmin ? (
+                      <Button variant="outline" size="sm" onClick={() => setEditing(item)}>
+                        <Pencil className="h-4 w-4" /> Edit
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Hanya baca</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -163,6 +183,7 @@ export default function PlatformPaketPage() {
                 <Input
                   id="paket-bulanan"
                   type="number"
+                  disabled={paketGratis}
                   value={form.harga_bulanan}
                   onChange={(event) => setForm({ ...form, harga_bulanan: event.target.value })}
                 />
@@ -172,6 +193,7 @@ export default function PlatformPaketPage() {
                 <Input
                   id="paket-tahunan"
                   type="number"
+                  disabled={paketGratis}
                   value={form.harga_tahunan}
                   onChange={(event) => setForm({ ...form, harga_tahunan: event.target.value })}
                 />

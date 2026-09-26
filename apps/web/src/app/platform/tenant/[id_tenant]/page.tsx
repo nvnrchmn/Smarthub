@@ -6,7 +6,12 @@ import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, KeyRound } from "lucide-react";
-import { STATUS_LANGGANAN_LABELS, STATUS_TENANT_LABELS, type StatusLangganan, type StatusTenant } from "@smarthub/shared";
+import {
+  STATUS_LANGGANAN_LABELS,
+  STATUS_TENANT_LABELS,
+  type StatusLangganan,
+  type StatusTenant,
+} from "@smarthub/shared";
 import { ApiError } from "@/lib/api-client";
 import { platformFetch } from "@/lib/platform-api-client";
 import { DataState } from "@/components/data-state";
@@ -46,6 +51,14 @@ export default function PlatformTenantDetailPage() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [alasan, setAlasan] = useState("");
+  const [kodeMfa, setKodeMfa] = useState("");
+
+  const meQuery = useQuery({
+    queryKey: ["platform", "me"],
+    queryFn: async () => (await platformFetch<{ role: string }>("/me")).data,
+    retry: false,
+  });
+  const isSuperadmin = meQuery.data?.role === "Superadmin";
 
   const tenantQuery = useQuery({
     queryKey: ["platform", "tenant", idTenant],
@@ -60,7 +73,8 @@ export default function PlatformTenantDetailPage() {
       toast.success("Status tenant diperbarui");
       await queryClient.invalidateQueries({ queryKey: ["platform"] });
     },
-    onError: (error) => toast.error(error instanceof ApiError ? error.message : "Gagal memperbarui"),
+    onError: (error) =>
+      toast.error(error instanceof ApiError ? error.message : "Gagal memperbarui"),
   });
 
   const impersonasi = useMutation({
@@ -68,7 +82,7 @@ export default function PlatformTenantDetailPage() {
       const response = await fetch("/api/platform/impersonate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id_tenant: idTenant, alasan }),
+        body: JSON.stringify({ id_tenant: idTenant, alasan, kode_mfa: kodeMfa }),
       });
       const payload = (await response.json().catch(() => null)) as { message?: string } | null;
       if (!response.ok) throw new Error(payload?.message ?? "Impersonasi gagal");
@@ -85,7 +99,10 @@ export default function PlatformTenantDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link href="/platform" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link
+        href="/platform"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
         <ArrowLeft className="h-4 w-4" /> Kembali ke dasbor
       </Link>
 
@@ -104,26 +121,37 @@ export default function PlatformTenantDetailPage() {
                 <p className="text-sm text-muted-foreground">{tenant.slug}</p>
               </div>
               <div className="flex gap-2">
-                {tenant.status === "Aktif" ? (
-                  <Button
-                    variant="outline"
-                    disabled={ubahStatus.isPending}
-                    onClick={() => ubahStatus.mutate("Ditangguhkan")}
-                  >
-                    Tangguhkan
-                  </Button>
+                {!isSuperadmin ? (
+                  <span className="text-xs text-muted-foreground">Hanya baca</span>
                 ) : (
-                  <Button
-                    variant="outline"
-                    disabled={ubahStatus.isPending}
-                    onClick={() => ubahStatus.mutate("Aktif")}
-                  >
-                    Aktifkan
-                  </Button>
+                  <>
+                    {tenant.status === "Aktif" ? (
+                      <Button
+                        variant="outline"
+                        disabled={ubahStatus.isPending}
+                        onClick={() => ubahStatus.mutate("Ditangguhkan")}
+                      >
+                        Tangguhkan
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        disabled={ubahStatus.isPending}
+                        onClick={() => ubahStatus.mutate("Aktif")}
+                      >
+                        Aktifkan
+                      </Button>
+                    )}
+                    <Button
+                      onClick={() => {
+                        setDialogOpen(true);
+                        setKodeMfa("");
+                      }}
+                    >
+                      <KeyRound className="h-4 w-4" /> Masuk sebagai
+                    </Button>
+                  </>
                 )}
-                <Button onClick={() => setDialogOpen(true)}>
-                  <KeyRound className="h-4 w-4" /> Masuk sebagai
-                </Button>
               </div>
             </div>
 
@@ -171,7 +199,8 @@ export default function PlatformTenantDetailPage() {
           <DialogHeader>
             <DialogTitle>Masuk sebagai {tenant?.nama}</DialogTitle>
             <DialogDescription>
-              Sesi read-only 60 menit sebagai Ketua_RT tenant ini, tercatat di audit log.
+              Sesi read-only 30 menit sebagai Ketua_RT tenant ini, tercatat di audit log. Kode MFA
+              diperlukan (step-up).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -183,9 +212,22 @@ export default function PlatformTenantDetailPage() {
               placeholder="mis. menindaklanjuti tiket dukungan"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="kode-mfa">Kode MFA</Label>
+            <Input
+              id="kode-mfa"
+              inputMode="numeric"
+              maxLength={6}
+              value={kodeMfa}
+              onChange={(event) => setKodeMfa(event.target.value)}
+              placeholder="6 digit dari aplikasi authenticator"
+            />
+          </div>
           <DialogFooter>
             <Button
-              disabled={alasan.trim().length < 5 || impersonasi.isPending}
+              disabled={
+                alasan.trim().length < 5 || !/^\d{6}$/.test(kodeMfa) || impersonasi.isPending
+              }
               onClick={() => impersonasi.mutate()}
             >
               {impersonasi.isPending ? "Memproses..." : "Masuk sebagai (read-only)"}
