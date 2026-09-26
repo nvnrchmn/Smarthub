@@ -5,6 +5,9 @@ Stack     : pnpm monorepo — apps/api (Express 5 + Prisma, tsup ESM), apps/web 
 Database  : PostgreSQL 16, db/user `smarthub`, 41 tabel (nama tabel & kolom bahasa Indonesia)
 Layanan   : smarthub-api.service :4000 | smarthub-web.service :3000 | postgresql | nginx
 Deploy    : build-lokal.sh smarthub [build|rilis] — config /etc/build-lokal.d/smarthub.conf
+            FRONT_CMD WAJIB diawali `pnpm --filter @smarthub/api prisma:generate &&` — `pnpm -w build`
+            hanya menjalankan tsup, jadi migrasi baru tanpa generate bikin prisma.<model> undefined
+            -> API 500 "Terjadi kesalahan pada server" (padahal di lokal jalan).
 Webroot   : /www/wwwroot/smarthub.logikraf.id/web = .next/standalone + .next/static + public
 Env       : /www/wwwroot/smarthub.logikraf.id/.env (EnvironmentFile kedua unit)
 Vhost     : /www/server/panel/vhost/nginx/smarthub.logikraf.id.conf (80->301 ; 443 ; /api/ -> 4000)
