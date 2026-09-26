@@ -122,3 +122,23 @@ Selengkapnya (strategi branching, konvensi commit, proses review, versioning, la
 ## Catatan lanjutan (di luar Fase 1)
 
 Refresh token, forgot password, registrasi publik, multi-tenant, notifikasi WhatsApp/email, ekspor laporan PDF/Excel, dan upgrade `multer` ke 2.x.
+
+## Otomatisasi Deploy via Webhook
+
+Untuk men-deploy perubahan ke VPS secara otomatis setelah push ke branch `main`, dipasang webhook listener yang:
+
+- Mendengarkan POST ke `/webhook` (diproksi oleh nginx ke `http://127.0.0.1:8092/webhook`).
+- Memverifikasi HMAC‑SHA256 signature menggunakan rahasia yang disimpan di `/etc/github-webhook-secret` (chmod 600).
+- Jika event adalah `push` ke `main`, menjalankan `/usr/local/bin/build-lokal.sh smarthub rilis` di bawah `flock` sehingga tidak akan tumpang‑tindih dengan proses build lain.
+- Layanan systemd: `webhook-smarthub` (enabled, running). Log dapat dilihat dengan `journalctl -u webhook-smarthub`.
+
+Untuk mengaktifkan:
+1. Tambahkan webhook di repository GitHub → Settings → Webhooks → Add webhook.
+   - Payload URL: `https://smarthub.logikraf.id/webhook`
+   - Content type: `application/json`
+   - Secret: (nilai yang sama dengan isi `/etc/github-webhook-secret`; tidak pernah disimpan di repo).
+   - Which events: `Push events` (atau biarkan default).
+2. Pastikan layanan webhook berjalan: `systemctl status webhook-smarthub`.
+3. Setiap push ke `main` akan otomatis melakukan `git pull`, build, dan rilis tanpa intervensi manual.
+
+Catatan: bila ada build manual yang sedang berjalan, webhook akan menunggu hingga flock melepaskan kunci sebelum memulai build berikutnya.
