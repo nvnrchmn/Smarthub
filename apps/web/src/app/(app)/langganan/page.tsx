@@ -38,7 +38,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface PaketItem {
   kode: string;
@@ -109,14 +116,11 @@ export default function LanggananPage() {
   const invoiceParams = { page, limit: 10 };
   const invoiceQuery = useQuery({
     queryKey: queryKeys.langgananInvoice(invoiceParams),
-    queryFn: async () =>
-      apiFetch<InvoiceItem[]>(`/langganan/invoice${buildQuery(invoiceParams)}`),
+    queryFn: async () => apiFetch<InvoiceItem[]>(`/langganan/invoice${buildQuery(invoiceParams)}`),
   });
 
   const invalidate = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["langganan"] }),
-    ]);
+    await Promise.all([queryClient.invalidateQueries({ queryKey: ["langganan"] })]);
   };
 
   const buatInvoice = useMutation({
@@ -175,6 +179,7 @@ export default function LanggananPage() {
   const invoices = invoiceQuery.data?.data ?? [];
 
   const paketTerpilih = paketItems.find((item) => item.kode === kodePaket);
+  const gratisTerpilih = paketTerpilih ? Number(paketTerpilih.harga_bulanan) === 0 : false;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -205,8 +210,20 @@ export default function LanggananPage() {
         />
         <StatCard
           label="Berakhir"
-          value={status?.berakhir ? formatTanggal(status.berakhir) : "-"}
-          hint={status ? `${status.hari_tersisa} hari tersisa` : undefined}
+          value={
+            status?.kode_paket === "free"
+              ? "Gratis"
+              : status?.berakhir
+                ? formatTanggal(status.berakhir)
+                : "-"
+          }
+          hint={
+            status
+              ? status.kode_paket === "free"
+                ? "Tanpa batas waktu"
+                : `${status.hari_tersisa} hari tersisa`
+              : undefined
+          }
           icon={RefreshCw}
           loading={statusQuery.isLoading}
         />
@@ -237,7 +254,7 @@ export default function LanggananPage() {
           isEmpty={paketItems.length === 0}
           emptyMessage="Belum ada paket langganan"
         >
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {paketItems.map((paket) => (
               <div key={paket.kode} className="rounded-lg border bg-card p-4">
                 <div className="flex items-center justify-between">
@@ -246,8 +263,12 @@ export default function LanggananPage() {
                     <StatusLanggananBadge status={status.status} />
                   ) : null}
                 </div>
-                <p className="mt-2 text-2xl font-semibold">{formatRupiah(paket.harga_bulanan)}</p>
-                <p className="text-xs text-muted-foreground">per bulan</p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {Number(paket.harga_bulanan) === 0 ? "Gratis" : formatRupiah(paket.harga_bulanan)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {Number(paket.harga_bulanan) === 0 ? "tanpa biaya" : "per bulan"}
+                </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {paket.batas_rumah ? `Maksimal ${paket.batas_rumah} rumah` : "Tanpa batas rumah"}
                 </p>
@@ -334,7 +355,9 @@ export default function LanggananPage() {
           <DialogHeader>
             <DialogTitle>Pilih Paket Langganan</DialogTitle>
             <DialogDescription>
-              Sistem menerbitkan invoice; setelah transfer dan verifikasi, langganan aktif.
+              {gratisTerpilih
+                ? "Paket Gratis diaktifkan langsung tanpa tagihan."
+                : "Sistem menerbitkan invoice; setelah transfer dan verifikasi, langganan aktif."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -353,28 +376,34 @@ export default function LanggananPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Periode</Label>
-              <Select
-                value={periode}
-                onValueChange={(value) => setPeriode(value as (typeof PERIODE_LANGGANAN)[number])}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PERIODE_LANGGANAN.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {PERIODE_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {paketTerpilih ? (
+            {gratisTerpilih ? null : (
+              <div className="space-y-2">
+                <Label>Periode</Label>
+                <Select
+                  value={periode}
+                  onValueChange={(value) => setPeriode(value as (typeof PERIODE_LANGGANAN)[number])}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PERIODE_LANGGANAN.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {PERIODE_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {gratisTerpilih ? (
+              <p className="text-sm text-muted-foreground">Tanpa tagihan — aktif seketika.</p>
+            ) : paketTerpilih ? (
               <p className="text-sm text-muted-foreground">
                 Tagihan:{" "}
-                {formatRupiah(periode === "tahunan" ? paketTerpilih.harga_tahunan : paketTerpilih.harga_bulanan)}
+                {formatRupiah(
+                  periode === "tahunan" ? paketTerpilih.harga_tahunan : paketTerpilih.harga_bulanan,
+                )}
               </p>
             ) : null}
           </div>
@@ -383,7 +412,13 @@ export default function LanggananPage() {
               disabled={!kodePaket || buatInvoice.isPending}
               onClick={() => buatInvoice.mutate()}
             >
-              {buatInvoice.isPending ? "Membuat..." : "Buat Invoice"}
+              {buatInvoice.isPending
+                ? gratisTerpilih
+                  ? "Mengaktifkan..."
+                  : "Membuat..."
+                : gratisTerpilih
+                  ? "Aktifkan Gratis"
+                  : "Buat Invoice"}
             </Button>
           </DialogFooter>
         </DialogContent>
