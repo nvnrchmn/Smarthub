@@ -13,6 +13,9 @@ Login     : tenant   POST /api/v1/auth/login       {identifier, password}
 PENTING   : API dijalankan LANGSUNG dari repo (ExecStart apps/api/dist/server.js), bukan dari copy.
             Menyalin node_modules ke webroot GAGAL — Prisma client hidup di pnpm store,
             error: Named export 'Prisma' not found (bundle ESM impor modul CJS).
+            JANGAN seragamkan jadi `import type`: commit 31d7cea mengembalikan 3 file
+            (error.middleware, impor, kyc.service) ke impor NILAI karena Prisma dipakai
+            saat runtime (Prisma.Decimal / Prisma.sql). `import type` HANYA bila murni tipe.
 CACHE     : /www/server/nginx/conf/proxy.conf (global, blok http) mengaktifkan `proxy_cache cache_one`
             -> HTML upstream dicache per-path (inactive=1d). Vhost INI sudah `proxy_cache off;`
             JANGAN dihapus: tanpa itu rilis = HTML basi + chunk 404 + halaman blank.
